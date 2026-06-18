@@ -825,6 +825,106 @@
 
   select option { font-family: var(--font); }
 
+  /* ─── Workspace Switcher ─── */
+  .ws-switcher {
+    position: relative;
+    display: none;
+  }
+
+  .ws-switcher.visible { display: block; }
+
+  .ws-switcher-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: #222;
+    border: 1px solid #444;
+    color: #ddd;
+    padding: 5px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+    font-family: var(--font);
+    transition: all 0.15s;
+  }
+
+  .ws-switcher-btn:hover { border-color: #888; color: #fff; }
+
+  .ws-dropdown {
+    display: none;
+    position: absolute;
+    top: calc(100% + 6px);
+    right: 0;
+    background: #1a1a1a;
+    border: 1px solid #444;
+    border-radius: 8px;
+    min-width: 220px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+    z-index: 300;
+    overflow: hidden;
+  }
+
+  .ws-dropdown.open { display: block; }
+
+  .ws-dropdown-header {
+    padding: 10px 14px 6px;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: #666;
+  }
+
+  .ws-dropdown-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 9px 14px;
+    cursor: pointer;
+    transition: background 0.1s;
+  }
+
+  .ws-dropdown-item:hover { background: #2a2a2a; }
+  .ws-dropdown-item.current { background: #2d2d2d; }
+
+  .ws-dropdown-item-name {
+    font-size: 13px;
+    color: #ddd;
+  }
+
+  .ws-dropdown-item-desc {
+    font-size: 11px;
+    color: #666;
+    margin-top: 1px;
+  }
+
+  .ws-dropdown-item-active {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #4ade80;
+    flex-shrink: 0;
+  }
+
+  .ws-dropdown-divider {
+    border: none;
+    border-top: 1px solid #333;
+    margin: 4px 0;
+  }
+
+  .ws-dropdown-action {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 9px 14px;
+    cursor: pointer;
+    color: #aaa;
+    font-size: 12px;
+    transition: background 0.1s;
+  }
+
+  .ws-dropdown-action:hover { background: #2a2a2a; color: #ddd; }
+
   @media (max-width: 700px) {
     .content { padding: 1rem; }
     .header { padding: 0 1rem; }
@@ -871,7 +971,18 @@
     </div>
     <div class="header-right">
       <span id="user-label"></span>
-      <button class="btn-logout" onclick="openAdminGate()">⚙ 管理</button>
+      <!-- 工作區切換器（僅管理者可見） -->
+      <div class="ws-switcher" id="ws-switcher">
+        <button class="ws-switcher-btn" onclick="toggleWsDropdown()">
+          <span id="ws-current-name">admin</span> ▾
+        </button>
+        <div class="ws-dropdown" id="ws-dropdown">
+          <div class="ws-dropdown-header">工作區列表</div>
+          <div id="ws-dropdown-list"></div>
+          <hr class="ws-dropdown-divider">
+          <div class="ws-dropdown-action" onclick="openAdminModal();closeWsDropdown()">⚙ 管理工作區</div>
+        </div>
+      </div>
       <button class="btn-logout" onclick="doLogout()">離開</button>
     </div>
   </header>
@@ -1112,7 +1223,7 @@ const ADMIN_PASSWORD = 'vetica-admin-2026'; // 管理者密碼，可自行修改
 // ═══════════════════════════════════════════════
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-let WS = '', USER = '', currentFilter = 'all';
+let WS = '', USER = '', currentFilter = 'all', isAdmin = false;
 let todos = [], projects = [], notes = [];
 let calYear, calMonth;
 
@@ -1163,19 +1274,51 @@ async function doLogin() {
 
 function doLogout() {
   localStorage.removeItem('vt-session');
-  WS = ''; USER = '';
+  WS = ''; USER = ''; isAdmin = false;
+  document.getElementById('ws-switcher').classList.remove('visible');
   document.getElementById('app').style.display = 'none';
   document.getElementById('login-screen').style.display = 'flex';
 }
 
 function bootApp() {
+  isAdmin = (WS === 'admin');
   document.getElementById('login-screen').style.display = 'none';
   document.getElementById('app').style.display = 'block';
-  document.getElementById('ws-label').textContent = WS;
   document.getElementById('user-label').textContent = USER;
+
+  if (isAdmin) {
+    // 管理者：顯示切換器，預設進入第一個非 admin 工作區
+    document.getElementById('ws-switcher').classList.add('visible');
+    loadWorkspaceSwitcher().then(() => {
+      // 若 WS 仍是 admin，切換到第一個可用工作區
+      if (WS === 'admin') {
+        const first = document.querySelector('.ws-dropdown-item');
+        if (first) {
+          const name = first.dataset.name;
+          if (name) switchToWorkspace(name);
+          return;
+        }
+      }
+      updateWsLabel();
+      loadAllAndRender();
+    });
+  } else {
+    document.getElementById('ws-switcher').classList.remove('visible');
+    updateWsLabel();
+    loadAllAndRender();
+  }
+
   const now = new Date();
   calYear = now.getFullYear(); calMonth = now.getMonth();
-  loadAll();
+}
+
+function updateWsLabel() {
+  document.getElementById('ws-label').textContent = WS;
+  document.getElementById('ws-current-name').textContent = WS;
+}
+
+async function loadAllAndRender() {
+  await loadAll();
 }
 
 // ═══════════════════════════════════════════════
@@ -1805,29 +1948,63 @@ async function deleteNote(noteId) {
 }
 
 // ═══════════════════════════════════════════════
-//  ADMIN — 工作區管理
+//  WORKSPACE SWITCHER（管理者專用）
 // ═══════════════════════════════════════════════
-function openAdminGate() {
-  document.getElementById('admin-gate-pw').value = '';
-  document.getElementById('admin-gate-error').style.display = 'none';
-  document.getElementById('admin-gate-modal').classList.add('open');
-  setTimeout(() => document.getElementById('admin-gate-pw').focus(), 80);
+let allWorkspaces = [];
+
+async function loadWorkspaceSwitcher() {
+  const { data } = await sb.from('workspaces').select('*').order('created_at');
+  allWorkspaces = (data || []).filter(w => w.name !== 'admin');
+  renderWsDropdown();
 }
 
-function closeAdminGate() {
-  document.getElementById('admin-gate-modal').classList.remove('open');
-}
-
-function verifyAdminGate() {
-  const pw = document.getElementById('admin-gate-pw').value;
-  if (pw !== ADMIN_PASSWORD) {
-    document.getElementById('admin-gate-error').style.display = 'block';
+function renderWsDropdown() {
+  const list = document.getElementById('ws-dropdown-list');
+  if (!allWorkspaces.length) {
+    list.innerHTML = '<div style="padding:8px 14px;color:#666;font-size:12px">尚無工作區</div>';
     return;
   }
-  closeAdminGate();
-  openAdminModal();
+  list.innerHTML = allWorkspaces.map(w => `
+    <div class="ws-dropdown-item ${WS === w.name ? 'current' : ''}" data-name="${esc(w.name)}" onclick="switchToWorkspace('${esc(w.name)}')">
+      <div>
+        <div class="ws-dropdown-item-name">${esc(w.name)}</div>
+        ${w.description ? `<div class="ws-dropdown-item-desc">${esc(w.description)}</div>` : ''}
+      </div>
+      ${WS === w.name ? '<div class="ws-dropdown-item-active"></div>' : ''}
+    </div>
+  `).join('');
 }
 
+async function switchToWorkspace(name) {
+  WS = name;
+  closeWsDropdown();
+  updateWsLabel();
+  renderWsDropdown();
+  // Reset tab to 待辦
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab-nav button').forEach(b => b.classList.remove('active'));
+  document.getElementById('tab-todos').classList.add('active');
+  document.querySelector('.tab-nav button').classList.add('active');
+  await loadAll();
+}
+
+function toggleWsDropdown() {
+  document.getElementById('ws-dropdown').classList.toggle('open');
+}
+
+function closeWsDropdown() {
+  document.getElementById('ws-dropdown').classList.remove('open');
+}
+
+// 點擊其他地方關閉下拉
+document.addEventListener('click', e => {
+  const switcher = document.getElementById('ws-switcher');
+  if (switcher && !switcher.contains(e.target)) closeWsDropdown();
+});
+
+// ═══════════════════════════════════════════════
+//  ADMIN — 工作區管理面板
+// ═══════════════════════════════════════════════
 async function openAdminModal() {
   document.getElementById('admin-modal').classList.add('open');
   await renderAdminWsList();
@@ -1841,7 +2018,9 @@ async function renderAdminWsList() {
   const listEl = document.getElementById('admin-ws-list');
   listEl.innerHTML = '<div style="color:var(--text-muted);font-size:13px;padding:8px 0">載入中…</div>';
   const { data } = await sb.from('workspaces').select('*').order('created_at');
-  const ws = data || [];
+  const ws = (data || []).filter(w => w.name !== 'admin');
+  allWorkspaces = ws;
+  renderWsDropdown();
   if (!ws.length) {
     listEl.innerHTML = '<div style="color:var(--text-muted);font-size:13px;padding:8px 0">尚無工作區</div>';
     return;
@@ -1853,6 +2032,7 @@ async function renderAdminWsList() {
         ${w.description ? `<div style="font-size:12px;color:var(--text-muted);margin-top:2px">${esc(w.description)}</div>` : ''}
         <div style="font-size:11px;color:#bbb;margin-top:3px;font-family:var(--font-mono)">密碼：${esc(w.password)}</div>
       </div>
+      <button class="btn btn-sm" onclick="switchToWorkspace('${esc(w.name)}');closeAdminModal()" style="white-space:nowrap">進入</button>
       <button class="btn btn-sm" style="color:#c0392b" onclick="deleteWorkspace('${esc(w.name)}')">刪除</button>
     </div>
   `).join('');
@@ -1863,6 +2043,7 @@ async function createWorkspace() {
   const password = document.getElementById('new-ws-password').value.trim();
   const desc = document.getElementById('new-ws-desc').value.trim();
   if (!name || !password) { showToast('請填寫工作區名稱與密碼'); return; }
+  if (name === 'admin') { showToast('不可使用 admin 作為工作區名稱'); return; }
 
   const { error } = await sb.from('workspaces').insert({
     name, password, description: desc || null
@@ -1882,6 +2063,7 @@ async function createWorkspace() {
 async function deleteWorkspace(name) {
   if (!confirm(`確定刪除工作區「${name}」？\n此操作不會刪除工作區內的資料。`)) return;
   await sb.from('workspaces').delete().eq('name', name);
+  if (WS === name) await switchToWorkspace(allWorkspaces[0]?.name || 'admin');
   await renderAdminWsList();
   showToast('工作區已刪除');
 }
@@ -1919,9 +2101,8 @@ document.querySelectorAll('.modal-overlay').forEach(o => {
 
 // Enter key on login
 document.addEventListener('keydown', e => {
-  if (e.key === 'Enter') {
-    if (document.getElementById('admin-gate-modal').classList.contains('open')) { verifyAdminGate(); return; }
-    if (document.getElementById('login-screen').style.display !== 'none') { doLogin(); }
+  if (e.key === 'Enter' && document.getElementById('login-screen').style.display !== 'none') {
+    doLogin();
   }
 });
 </script>
