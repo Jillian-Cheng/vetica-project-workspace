@@ -849,9 +849,14 @@
       <input id="ws-input" type="text" placeholder="例：vetica-taipei" autocomplete="off" />
     </div>
     <div class="form-group">
+      <label>工作區密碼 Password</label>
+      <input id="ws-password" type="password" placeholder="請輸入密碼" autocomplete="off" />
+    </div>
+    <div class="form-group">
       <label>您的姓名 Your Name</label>
       <input id="name-input" type="text" placeholder="例：Jillian" autocomplete="off" />
     </div>
+    <div id="login-error" style="color:#c0392b;font-size:12px;margin-bottom:8px;display:none"></div>
     <button class="btn-primary" onclick="doLogin()">進入 Enter</button>
   </div>
 </div>
@@ -866,6 +871,7 @@
     </div>
     <div class="header-right">
       <span id="user-label"></span>
+      <button class="btn-logout" onclick="openAdminGate()">⚙ 管理</button>
       <button class="btn-logout" onclick="doLogout()">離開</button>
     </div>
   </header>
@@ -1037,6 +1043,59 @@
   </div>
 </div>
 
+<!-- ──────────────── ADMIN GATE MODAL ──────────────── -->
+<div class="modal-overlay" id="admin-gate-modal">
+  <div class="modal" style="max-width:360px">
+    <h3>管理者驗證</h3>
+    <p style="font-size:13px;color:var(--text-muted);margin-bottom:1.2rem">請輸入管理者密碼以進入工作區管理</p>
+    <div class="form-group">
+      <label>管理者密碼</label>
+      <input id="admin-gate-pw" type="password" placeholder="請輸入管理者密碼" autocomplete="off" />
+    </div>
+    <div id="admin-gate-error" style="color:#c0392b;font-size:12px;margin-bottom:8px;display:none">密碼錯誤</div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeAdminGate()">取消</button>
+      <button class="btn btn-dark" onclick="verifyAdminGate()">驗證</button>
+    </div>
+  </div>
+</div>
+
+<!-- ──────────────── ADMIN PANEL MODAL ──────────────── -->
+<div class="modal-overlay" id="admin-modal">
+  <div class="modal" style="max-width:580px">
+    <h3>工作區管理</h3>
+    <p style="font-size:13px;color:var(--text-muted);margin-bottom:1.5rem">建立、刪除工作區，設定各工作區密碼</p>
+
+    <!-- 新增工作區 -->
+    <div style="background:var(--bg);border-radius:var(--radius);padding:16px;margin-bottom:1.5rem">
+      <div style="font-size:12px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:var(--text-muted);margin-bottom:12px">新增工作區</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+        <div class="form-group" style="margin:0">
+          <label>工作區名稱 *</label>
+          <input id="new-ws-name" type="text" placeholder="例：starite-project" autocomplete="off" />
+        </div>
+        <div class="form-group" style="margin:0">
+          <label>密碼 *</label>
+          <input id="new-ws-password" type="text" placeholder="設定密碼" autocomplete="off" />
+        </div>
+      </div>
+      <div class="form-group" style="margin-bottom:10px">
+        <label>說明（選填）</label>
+        <input id="new-ws-desc" type="text" placeholder="例：星銘專案專用" autocomplete="off" />
+      </div>
+      <button class="btn btn-dark btn-sm" onclick="createWorkspace()">＋ 建立工作區</button>
+    </div>
+
+    <!-- 工作區列表 -->
+    <div style="font-size:12px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:var(--text-muted);margin-bottom:10px">現有工作區</div>
+    <div id="admin-ws-list" style="display:flex;flex-direction:column;gap:8px;max-height:280px;overflow-y:auto"></div>
+
+    <div class="modal-actions" style="margin-top:1.5rem">
+      <button class="btn btn-dark" onclick="closeAdminModal()">關閉</button>
+    </div>
+  </div>
+</div>
+
 <!-- ──────────────── TOAST ──────────────── -->
 <div class="toast hidden" id="toast"></div>
 
@@ -1044,8 +1103,9 @@
 // ═══════════════════════════════════════════════
 //  CONFIGURATION — 請填入您的 Supabase 資訊
 // ═══════════════════════════════════════════════
-const SUPABASE_URL = 'const SUPABASE_URL = 'https://ihewmltnvgcydoalpzyj.supabase.co';';
-const SUPABASE_ANON_KEY = 'const SUPABASE_ANON_KEY = 'sb_publishable_A8B4J...（您的完整金鑰）';';
+const SUPABASE_URL = 'YOUR_SUPABASE_URL';
+const SUPABASE_ANON_KEY = 'YOUR_SUPABASE_ANON_KEY';
+const ADMIN_PASSWORD = 'vetica-admin-2026'; // 管理者密碼，可自行修改
 
 // ═══════════════════════════════════════════════
 //  INIT
@@ -1070,10 +1130,32 @@ let calYear, calMonth;
 // ═══════════════════════════════════════════════
 //  AUTH
 // ═══════════════════════════════════════════════
-function doLogin() {
+async function doLogin() {
   const ws = document.getElementById('ws-input').value.trim();
+  const pw = document.getElementById('ws-password').value;
   const name = document.getElementById('name-input').value.trim();
-  if (!ws || !name) { showToast('請填寫工作區名稱與姓名'); return; }
+  const errEl = document.getElementById('login-error');
+  errEl.style.display = 'none';
+
+  if (!ws || !name || !pw) {
+    errEl.textContent = '請填寫所有欄位';
+    errEl.style.display = 'block';
+    return;
+  }
+
+  // Verify workspace password
+  const { data, error } = await sb.from('workspaces').select('name,password').eq('name', ws).single();
+  if (error || !data) {
+    errEl.textContent = '找不到此工作區，請確認名稱或聯絡管理者';
+    errEl.style.display = 'block';
+    return;
+  }
+  if (data.password !== pw) {
+    errEl.textContent = '密碼錯誤';
+    errEl.style.display = 'block';
+    return;
+  }
+
   WS = ws; USER = name;
   localStorage.setItem('vt-session', JSON.stringify({ ws: WS, user: USER }));
   bootApp();
@@ -1723,6 +1805,88 @@ async function deleteNote(noteId) {
 }
 
 // ═══════════════════════════════════════════════
+//  ADMIN — 工作區管理
+// ═══════════════════════════════════════════════
+function openAdminGate() {
+  document.getElementById('admin-gate-pw').value = '';
+  document.getElementById('admin-gate-error').style.display = 'none';
+  document.getElementById('admin-gate-modal').classList.add('open');
+  setTimeout(() => document.getElementById('admin-gate-pw').focus(), 80);
+}
+
+function closeAdminGate() {
+  document.getElementById('admin-gate-modal').classList.remove('open');
+}
+
+function verifyAdminGate() {
+  const pw = document.getElementById('admin-gate-pw').value;
+  if (pw !== ADMIN_PASSWORD) {
+    document.getElementById('admin-gate-error').style.display = 'block';
+    return;
+  }
+  closeAdminGate();
+  openAdminModal();
+}
+
+async function openAdminModal() {
+  document.getElementById('admin-modal').classList.add('open');
+  await renderAdminWsList();
+}
+
+function closeAdminModal() {
+  document.getElementById('admin-modal').classList.remove('open');
+}
+
+async function renderAdminWsList() {
+  const listEl = document.getElementById('admin-ws-list');
+  listEl.innerHTML = '<div style="color:var(--text-muted);font-size:13px;padding:8px 0">載入中…</div>';
+  const { data } = await sb.from('workspaces').select('*').order('created_at');
+  const ws = data || [];
+  if (!ws.length) {
+    listEl.innerHTML = '<div style="color:var(--text-muted);font-size:13px;padding:8px 0">尚無工作區</div>';
+    return;
+  }
+  listEl.innerHTML = ws.map(w => `
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px 14px;display:flex;align-items:center;gap:12px">
+      <div style="flex:1">
+        <div style="font-size:13px;font-weight:600;color:var(--text)">${esc(w.name)}</div>
+        ${w.description ? `<div style="font-size:12px;color:var(--text-muted);margin-top:2px">${esc(w.description)}</div>` : ''}
+        <div style="font-size:11px;color:#bbb;margin-top:3px;font-family:var(--font-mono)">密碼：${esc(w.password)}</div>
+      </div>
+      <button class="btn btn-sm" style="color:#c0392b" onclick="deleteWorkspace('${esc(w.name)}')">刪除</button>
+    </div>
+  `).join('');
+}
+
+async function createWorkspace() {
+  const name = document.getElementById('new-ws-name').value.trim();
+  const password = document.getElementById('new-ws-password').value.trim();
+  const desc = document.getElementById('new-ws-desc').value.trim();
+  if (!name || !password) { showToast('請填寫工作區名稱與密碼'); return; }
+
+  const { error } = await sb.from('workspaces').insert({
+    name, password, description: desc || null
+  });
+  if (error) {
+    if (error.code === '23505') { showToast('此工作區名稱已存在'); }
+    else { showToast('建立失敗：' + error.message); }
+    return;
+  }
+  document.getElementById('new-ws-name').value = '';
+  document.getElementById('new-ws-password').value = '';
+  document.getElementById('new-ws-desc').value = '';
+  await renderAdminWsList();
+  showToast(`工作區「${name}」已建立`);
+}
+
+async function deleteWorkspace(name) {
+  if (!confirm(`確定刪除工作區「${name}」？\n此操作不會刪除工作區內的資料。`)) return;
+  await sb.from('workspaces').delete().eq('name', name);
+  await renderAdminWsList();
+  showToast('工作區已刪除');
+}
+
+// ═══════════════════════════════════════════════
 //  UTILS
 // ═══════════════════════════════════════════════
 function esc(s) {
@@ -1755,8 +1919,9 @@ document.querySelectorAll('.modal-overlay').forEach(o => {
 
 // Enter key on login
 document.addEventListener('keydown', e => {
-  if (e.key === 'Enter' && document.getElementById('login-screen').style.display !== 'none') {
-    doLogin();
+  if (e.key === 'Enter') {
+    if (document.getElementById('admin-gate-modal').classList.contains('open')) { verifyAdminGate(); return; }
+    if (document.getElementById('login-screen').style.display !== 'none') { doLogin(); }
   }
 });
 </script>
