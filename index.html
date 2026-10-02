@@ -995,7 +995,7 @@
           <div class="ws-dropdown-header">工作區列表</div>
           <div id="ws-dropdown-list"></div>
           <hr class="ws-dropdown-divider">
-          <div class="ws-dropdown-action" onclick="openAdminGate();closeWsDropdown()">⚙ 管理工作區</div>
+          <div class="ws-dropdown-action" onclick="openAdminModal();closeWsDropdown()">⚙ 工作區總覽</div>
         </div>
       </div>
       <button class="btn-logout" onclick="doLogout()">離開</button>
@@ -1169,53 +1169,14 @@
   </div>
 </div>
 
-<!-- ──────────────── ADMIN GATE MODAL ──────────────── -->
-<div class="modal-overlay" id="admin-gate-modal">
-  <div class="modal" style="max-width:360px">
-    <h3>管理者驗證</h3>
-    <p style="font-size:13px;color:var(--text-muted);margin-bottom:1.2rem">請輸入管理者（admin）密碼以進入工作區管理</p>
-    <div class="form-group">
-      <label>管理者密碼</label>
-      <input id="admin-gate-pw" type="password" placeholder="請輸入管理者密碼" autocomplete="off" />
-    </div>
-    <div id="admin-gate-error" style="color:#c0392b;font-size:12px;margin-bottom:8px;display:none">密碼錯誤</div>
-    <div class="modal-actions">
-      <button class="btn" onclick="closeAdminGate()">取消</button>
-      <button class="btn btn-dark" onclick="verifyAdminGate()">驗證</button>
-    </div>
-  </div>
-</div>
-
-<!-- ──────────────── ADMIN PANEL MODAL ──────────────── -->
+<!-- ──────────────── WORKSPACE OVERVIEW MODAL（管理者） ──────────────── -->
 <div class="modal-overlay" id="admin-modal">
-  <div class="modal" style="max-width:580px">
-    <h3>工作區管理</h3>
-    <p style="font-size:13px;color:var(--text-muted);margin-bottom:1.5rem">建立、刪除工作區，設定各工作區密碼</p>
-
-    <!-- 新增工作區 -->
-    <div style="background:var(--bg);border-radius:var(--radius);padding:16px;margin-bottom:1.5rem">
-      <div style="font-size:12px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:var(--text-muted);margin-bottom:12px">新增工作區</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
-        <div class="form-group" style="margin:0">
-          <label>工作區名稱 *</label>
-          <input id="new-ws-name" type="text" placeholder="例：starite-project" autocomplete="off" />
-        </div>
-        <div class="form-group" style="margin:0">
-          <label>密碼 *</label>
-          <input id="new-ws-password" type="password" placeholder="設定密碼" autocomplete="new-password" />
-        </div>
-      </div>
-      <div class="form-group" style="margin-bottom:10px">
-        <label>說明（選填）</label>
-        <input id="new-ws-desc" type="text" placeholder="例：星銘專案專用" autocomplete="off" />
-      </div>
-      <button class="btn btn-dark btn-sm" onclick="createWorkspace()">＋ 建立工作區</button>
-    </div>
-
-    <!-- 工作區列表 -->
-    <div style="font-size:12px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:var(--text-muted);margin-bottom:10px">現有工作區</div>
-    <div id="admin-ws-list" style="display:flex;flex-direction:column;gap:8px;max-height:280px;overflow-y:auto"></div>
-
+  <div class="modal" style="max-width:560px">
+    <h3>工作區總覽</h3>
+    <p style="font-size:13px;color:var(--text-muted);margin-bottom:1.2rem;line-height:1.7">
+      以下為目前的工作區，可直接進入檢視。新增或刪除工作區、變更密碼，請至 Supabase 後台操作（見操作手冊）。
+    </p>
+    <div id="admin-ws-list" style="display:flex;flex-direction:column;gap:8px;max-height:320px;overflow-y:auto"></div>
     <div class="modal-actions" style="margin-top:1.5rem">
       <button class="btn btn-dark" onclick="closeAdminModal()">關閉</button>
     </div>
@@ -1235,67 +1196,115 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 // ═══════════════════════════════════════════════
 //  INIT
 // ═══════════════════════════════════════════════
-const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+// 工作區帳號對應的 Supabase Auth 登入信箱（帳號為手動建立並自動確認，不會寄信）
+const WS_EMAIL_DOMAIN = 'vetica-taipei.com';
+const wsEmail = ws => `ws-${ws}@${WS_EMAIL_DOMAIN}`;
+
+// 資料請求若遭拒（401 登入逾時 / 403 無權限），統一提示，避免寫入失敗卻毫無訊息
+let authFailTimer = null;
+function onDataAuthFailure(status) {
+  if (status === 401) { showToast('登入已逾時，請重新登入'); resetToLogin(); return; }
+  clearTimeout(authFailTimer);
+  authFailTimer = setTimeout(() => showToast('權限不足，操作未被儲存'), 150);
+}
+
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+  global: {
+    fetch: async (input, init) => {
+      const res = await fetch(input, init);
+      try {
+        const url = typeof input === 'string' ? input : (input && input.url) || '';
+        if (url.includes('/rest/v1/') && (res.status === 401 || res.status === 403)) onDataAuthFailure(res.status);
+      } catch (e) {}
+      return res;
+    }
+  }
+});
 
 let WS = '', USER = '', currentFilter = 'all', isAdmin = false;
 let todos = [], projects = [], notes = [];
 let calYear, calMonth;
 
-// Restore session
-(function () {
-  const saved = localStorage.getItem('vt-session');
-  if (saved) {
-    try {
-      const s = JSON.parse(saved);
-      if (s.ws && s.user) { WS = s.ws; USER = s.user; bootApp(); }
-    } catch (e) {}
-  }
+let sessionIsAdmin = false;
+
+// Restore session（由 Supabase Auth 管理登入狀態，瀏覽器僅另存顯示用姓名）
+(async function initSession() {
+  try {
+    const { data } = await sb.auth.getSession();
+    const session = data && data.session;
+    if (!session) return;
+    const meta = (session.user && session.user.app_metadata) || {};
+    if (!meta.workspace) { await sb.auth.signOut(); return; }
+    let name = '';
+    try { name = (JSON.parse(localStorage.getItem('vt-session') || '{}').user) || ''; } catch (e) {}
+    WS = meta.workspace;
+    USER = name || '成員';
+    sessionIsAdmin = meta.role === 'admin';
+    bootApp();
+  } catch (e) {}
 })();
+
+sb.auth.onAuthStateChange(event => {
+  if (event === 'SIGNED_OUT' && document.getElementById('app').style.display === 'block') resetToLogin();
+});
 
 // ═══════════════════════════════════════════════
 //  AUTH
 // ═══════════════════════════════════════════════
 async function doLogin() {
-  const ws = document.getElementById('ws-input').value.trim();
+  const wsRaw = document.getElementById('ws-input').value.trim();
   const pw = document.getElementById('ws-password').value;
   const name = document.getElementById('name-input').value.trim();
   const errEl = document.getElementById('login-error');
+  const btn = document.querySelector('#login-screen .btn-primary');
+  const fail = msg => { errEl.textContent = msg; errEl.style.display = 'block'; };
   errEl.style.display = 'none';
 
-  if (!ws || !name || !pw) {
-    errEl.textContent = '請填寫所有欄位';
-    errEl.style.display = 'block';
-    return;
-  }
+  if (!wsRaw || !name || !pw) { fail('請填寫所有欄位'); return; }
+  const ws = wsRaw.toLowerCase();
+  if (!/^[a-z0-9-]+$/.test(ws)) { fail('工作區名稱僅限英文小寫、數字與連字號'); return; }
 
-  // Verify workspace password
-  const { data, error } = await sb.from('workspaces').select('name,password').eq('name', ws).single();
-  if (error || !data) {
-    errEl.textContent = '找不到此工作區，請確認名稱或聯絡管理者';
-    errEl.style.display = 'block';
-    return;
+  btn.disabled = true;
+  try {
+    const { data, error } = await sb.auth.signInWithPassword({ email: wsEmail(ws), password: pw });
+    if (error || !data || !data.user) {
+      fail(error && error.status === 429 ? '嘗試次數過多，請稍後再試' : '工作區名稱或密碼錯誤');
+      return;
+    }
+    const meta = data.user.app_metadata || {};
+    const isAdminAcct = meta.role === 'admin';
+    if (meta.workspace !== ws || (ws === 'admin' && !isAdminAcct)) {
+      await sb.auth.signOut();
+      fail('此帳號尚未完成工作區設定，請聯絡管理者');
+      return;
+    }
+    WS = ws; USER = name; sessionIsAdmin = isAdminAcct;
+    localStorage.setItem('vt-session', JSON.stringify({ user: USER }));
+    document.getElementById('ws-password').value = '';
+    bootApp();
+  } catch (e) {
+    fail('登入時發生錯誤，請稍後再試');
+  } finally {
+    btn.disabled = false;
   }
-  if (data.password !== pw) {
-    errEl.textContent = '密碼錯誤';
-    errEl.style.display = 'block';
-    return;
-  }
-
-  WS = ws; USER = name;
-  localStorage.setItem('vt-session', JSON.stringify({ ws: WS, user: USER }));
-  bootApp();
 }
 
-function doLogout() {
+async function doLogout() {
+  try { await sb.auth.signOut(); } catch (e) {}
+  resetToLogin();
+}
+
+function resetToLogin() {
   localStorage.removeItem('vt-session');
-  WS = ''; USER = ''; isAdmin = false;
+  WS = ''; USER = ''; isAdmin = false; sessionIsAdmin = false;
+  todos = []; projects = []; notes = [];
   document.getElementById('ws-switcher').classList.remove('visible');
   document.getElementById('app').style.display = 'none';
   document.getElementById('login-screen').style.display = 'flex';
 }
 
 function bootApp() {
-  isAdmin = (WS === 'admin');
+  isAdmin = sessionIsAdmin;
   document.getElementById('login-screen').style.display = 'none';
   document.getElementById('app').style.display = 'block';
   document.getElementById('user-label').textContent = USER;
@@ -2048,7 +2057,7 @@ async function deleteNote(noteId) {
 let allWorkspaces = [];
 
 async function loadWorkspaceSwitcher() {
-  const { data } = await sb.from('workspaces').select('*').order('created_at');
+  const { data } = await sb.from('workspaces').select('name,description,created_at').order('created_at');
   allWorkspaces = (data || []).filter(w => w.name !== 'admin');
   renderWsDropdown();
 }
@@ -2098,39 +2107,10 @@ document.addEventListener('click', e => {
 });
 
 // ═══════════════════════════════════════════════
-//  ADMIN — 管理者二次驗證 + 工作區管理面板
+//  ADMIN — 工作區總覽（唯讀；管理動作於 Supabase 後台進行）
 // ═══════════════════════════════════════════════
-function openAdminGate() {
-  if (!isAdmin) { showToast('僅管理者可使用此功能'); return; }
-  document.getElementById('admin-gate-pw').value = '';
-  document.getElementById('admin-gate-error').style.display = 'none';
-  document.getElementById('admin-gate-modal').classList.add('open');
-  setTimeout(() => document.getElementById('admin-gate-pw').focus(), 80);
-}
-
-function closeAdminGate() {
-  document.getElementById('admin-gate-modal').classList.remove('open');
-  document.getElementById('admin-gate-pw').value = '';
-}
-
-async function verifyAdminGate() {
-  const pw = document.getElementById('admin-gate-pw').value;
-  const errEl = document.getElementById('admin-gate-error');
-  errEl.style.display = 'none';
-  if (!pw) { errEl.textContent = '請輸入密碼'; errEl.style.display = 'block'; return; }
-
-  // 以 workspaces 資料表中 admin 的密碼為準，前端原始碼不再存放任何管理者密碼
-  const { data, error } = await sb.from('workspaces').select('password').eq('name', 'admin').single();
-  if (error || !data || data.password !== pw) {
-    errEl.textContent = '密碼錯誤';
-    errEl.style.display = 'block';
-    return;
-  }
-  closeAdminGate();
-  openAdminModal();
-}
-
 async function openAdminModal() {
+  if (!isAdmin) { showToast('僅管理者可使用此功能'); return; }
   document.getElementById('admin-modal').classList.add('open');
   await renderAdminWsList();
 }
@@ -2157,39 +2137,8 @@ async function renderAdminWsList() {
         ${w.description ? `<div style="font-size:12px;color:var(--text-muted);margin-top:2px">${esc(w.description)}</div>` : ''}
       </div>
       <button class="btn btn-sm" onclick="switchToWorkspace('${esc(w.name)}');closeAdminModal()" style="white-space:nowrap">進入</button>
-      <button class="btn btn-sm" style="color:#c0392b" onclick="deleteWorkspace('${esc(w.name)}')">刪除</button>
     </div>
   `).join('');
-}
-
-async function createWorkspace() {
-  const name = document.getElementById('new-ws-name').value.trim();
-  const password = document.getElementById('new-ws-password').value.trim();
-  const desc = document.getElementById('new-ws-desc').value.trim();
-  if (!name || !password) { showToast('請填寫工作區名稱與密碼'); return; }
-  if (name === 'admin') { showToast('不可使用 admin 作為工作區名稱'); return; }
-
-  const { error } = await sb.from('workspaces').insert({
-    name, password, description: desc || null
-  });
-  if (error) {
-    if (error.code === '23505') { showToast('此工作區名稱已存在'); }
-    else { showToast('建立失敗：' + error.message); }
-    return;
-  }
-  document.getElementById('new-ws-name').value = '';
-  document.getElementById('new-ws-password').value = '';
-  document.getElementById('new-ws-desc').value = '';
-  await renderAdminWsList();
-  showToast(`工作區「${name}」已建立`);
-}
-
-async function deleteWorkspace(name) {
-  if (!confirm(`確定刪除工作區「${name}」？\n此操作不會刪除工作區內的資料。`)) return;
-  await sb.from('workspaces').delete().eq('name', name);
-  if (WS === name) await switchToWorkspace(allWorkspaces.find(w => w.name !== name)?.name || 'admin');
-  await renderAdminWsList();
-  showToast('工作區已刪除');
 }
 
 // ═══════════════════════════════════════════════
@@ -2223,13 +2172,11 @@ document.querySelectorAll('.modal-overlay').forEach(o => {
   });
 });
 
-// Enter key on login / admin gate
+// Enter key on login
 document.addEventListener('keydown', e => {
   if (e.key !== 'Enter') return;
-  if (document.getElementById('admin-gate-modal').classList.contains('open')) {
-    verifyAdminGate();
-  } else if (document.getElementById('login-screen').style.display !== 'none' &&
-             document.getElementById('app').style.display !== 'block') {
+  if (document.getElementById('login-screen').style.display !== 'none' &&
+      document.getElementById('app').style.display !== 'block') {
     doLogin();
   }
 });
