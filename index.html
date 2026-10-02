@@ -947,6 +947,52 @@
     .tab-nav button { padding: 12px 14px; white-space: nowrap; }
     .project-details { grid-template-columns: 1fr 1fr; }
   }
+  /* ─── v3：角色與總覽 ─── */
+  body:not(.is-admin) .admin-only { display: none !important; }
+  body:not(.is-finance) .finance-only { display: none !important; }
+  .sync-label { font-size: 11px; color: #888; margin-right: 4px; white-space: nowrap; }
+  .proj-pct { font-size: 12px; color: var(--text-mid); font-weight: 600; }
+  .pct-select {
+    font-family: var(--font); font-size: 12px; padding: 3px 6px;
+    border: 1px solid var(--border); border-radius: var(--radius-sm);
+    background: var(--surface); color: var(--text); cursor: pointer;
+  }
+  .ov-summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 1rem; }
+  .ov-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 16px; }
+  .ov-card .n { font-size: 24px; font-weight: 600; color: var(--text); line-height: 1.2; }
+  .ov-card .l { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+  .ov-ws { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 14px; box-shadow: var(--shadow); overflow: hidden; }
+  .ov-ws-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 12px 16px; cursor: pointer; background: #fafaf9; border-bottom: 1px solid var(--border-light); }
+  .ov-ws-name { font-weight: 600; font-size: 15px; color: var(--text); }
+  .ov-chips { font-size: 12px; color: var(--text-mid); }
+  .ov-spacer { flex: 1; }
+  .ov-arrow { font-size: 10px; color: var(--text-muted); width: 12px; }
+  .ov-ws-body { padding: 8px 16px 14px; }
+  .ov-sec-title { font-size: 11px; font-weight: 600; letter-spacing: 0.08em; color: var(--text-muted); margin: 8px 0 4px; }
+  .ov-proj { border-bottom: 1px solid var(--border-light); }
+  .ov-proj:last-of-type { border-bottom: none; }
+  .ov-proj-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 9px 0; cursor: pointer; }
+  .ov-proj-name { font-size: 14px; font-weight: 500; color: var(--text); }
+  .ov-bar { width: 110px; height: 6px; background: #e8e8e5; border-radius: 3px; overflow: hidden; flex-shrink: 0; }
+  .ov-bar.sm { width: 70px; height: 4px; }
+  .ov-bar-fill { height: 100%; background: #333; border-radius: 3px; }
+  .ov-pct { font-size: 12px; font-weight: 600; color: var(--text-mid); width: 36px; text-align: right; }
+  .ov-row-actions { display: flex; gap: 6px; flex-shrink: 0; }
+  .ov-proj-detail { padding: 2px 0 12px 20px; }
+  .ov-fin { font-size: 12px; color: var(--text-mid); margin-bottom: 4px; }
+  .ov-sub { display: flex; align-items: center; gap: 8px; padding: 3px 0; font-size: 13px; }
+  .ov-sub-text { flex: 1; color: var(--text); }
+  .ov-sub-pct { font-size: 12px; color: var(--text-mid); width: 34px; text-align: right; }
+  .ov-note { font-size: 13px; color: var(--text); padding: 3px 0; line-height: 1.6; }
+  .ov-todo { display: flex; align-items: center; gap: 8px; padding: 5px 0; font-size: 13px; border-bottom: 1px dashed var(--border-light); }
+  .ov-todo.done .ov-todo-text { text-decoration: line-through; color: var(--text-muted); }
+  .ov-todo-mark { width: 14px; color: var(--status-done); font-weight: 700; }
+  .ov-todo-text { flex: 1; }
+  @media (max-width: 700px) {
+    .ov-summary { grid-template-columns: 1fr 1fr; }
+    .ov-bar { width: 70px; }
+    .sync-label { display: none; }
+  }
 </style>
 </head>
 <body>
@@ -985,6 +1031,8 @@
       <span class="workspace-label" id="ws-label"></span>
     </div>
     <div class="header-right">
+      <span class="sync-label" id="sync-label"></span>
+      <button class="btn-logout" id="refresh-btn" onclick="manualRefresh()" title="立即同步最新資料">⟳ 更新</button>
       <span id="user-label"></span>
       <!-- 工作區切換器（僅管理者可見） -->
       <div class="ws-switcher" id="ws-switcher">
@@ -995,7 +1043,7 @@
           <div class="ws-dropdown-header">工作區列表</div>
           <div id="ws-dropdown-list"></div>
           <hr class="ws-dropdown-divider">
-          <div class="ws-dropdown-action" onclick="openAdminModal();closeWsDropdown()">⚙ 工作區總覽</div>
+          <div class="ws-dropdown-action" onclick="showTab('overview');closeWsDropdown()">📊 全部工作區總覽</div>
         </div>
       </div>
       <button class="btn-logout" onclick="doLogout()">離開</button>
@@ -1003,18 +1051,40 @@
   </header>
 
   <nav class="tab-nav">
-    <button class="active" onclick="switchTab('todos', this)">待辦事項</button>
-    <button onclick="switchTab('calendar', this)">行事曆</button>
-    <button onclick="switchTab('projects', this)">專案規劃</button>
+    <button class="admin-only" data-tab="overview" onclick="showTab('overview')">全部工作區總覽</button>
+    <button class="active" data-tab="todos" onclick="showTab('todos')">待辦事項</button>
+    <button data-tab="calendar" onclick="showTab('calendar')">行事曆</button>
+    <button data-tab="projects" onclick="showTab('projects')">專案規劃</button>
   </nav>
 
   <main class="content">
 
+    <!-- ── TAB: 全部工作區總覽（管理者）── -->
+    <div id="tab-overview" class="tab-panel admin-only">
+      <div class="section-header">
+        <h1 class="section-title">全部工作區總覽</h1>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-dark" onclick="openProjectModal(null)">＋ 新增專案</button>
+          <button class="btn btn-dark" onclick="openTodoModal(null)">＋ 指派待辦</button>
+        </div>
+      </div>
+      <div class="ov-summary" id="overview-summary"></div>
+      <div class="filter-bar" id="ov-filters">
+        <button class="filter-btn active" onclick="setOvFilter(this,'all')">全部狀態</button>
+        <button class="filter-btn" onclick="setOvFilter(this,'提案中')">提案中</button>
+        <button class="filter-btn" onclick="setOvFilter(this,'進行中')">進行中</button>
+        <button class="filter-btn" onclick="setOvFilter(this,'已完成')">已完成</button>
+        <button class="filter-btn" onclick="setOvFilter(this,'暫停')">暫停</button>
+        <button class="filter-btn" onclick="setOvFilter(this,'取消')">取消</button>
+      </div>
+      <div id="overview-list"></div>
+    </div>
+
     <!-- ── TAB: 待辦事項 ── -->
-    <div id="tab-todos" class="tab-panel active">
+    <div id="tab-todos" class="tab-panel">
       <div class="section-header">
         <h1 class="section-title">待辦事項</h1>
-        <div style="display:flex;gap:8px">
+        <div class="admin-only" style="display:flex;gap:8px">
           <button class="btn" onclick="tidyTodos()">整理</button>
           <button class="btn btn-dark" onclick="openTodoModal()">＋ 新增</button>
         </div>
@@ -1046,9 +1116,9 @@
         <div class="cal-grid" id="cal-grid"></div>
         <div class="cal-legend">
           <div class="cal-legend-item"><div class="cal-legend-swatch" style="background:#dbeafe"></div>待辦日期</div>
-          <div class="cal-legend-item"><div class="cal-legend-swatch" style="background:#fef3c7"></div>發票日期</div>
-          <div class="cal-legend-item"><div class="cal-legend-swatch" style="background:#ede9fe"></div>預估收款</div>
-          <div class="cal-legend-item"><div class="cal-legend-swatch" style="background:#d1fae5"></div>實際收款</div>
+          <div class="cal-legend-item finance-only"><div class="cal-legend-swatch" style="background:#fef3c7"></div>發票日期</div>
+          <div class="cal-legend-item finance-only"><div class="cal-legend-swatch" style="background:#ede9fe"></div>預估收款</div>
+          <div class="cal-legend-item finance-only"><div class="cal-legend-swatch" style="background:#d1fae5"></div>實際收款</div>
         </div>
       </div>
     </div>
@@ -1057,7 +1127,7 @@
     <div id="tab-projects" class="tab-panel">
       <div class="section-header">
         <h1 class="section-title">專案規劃</h1>
-        <button class="btn btn-dark" onclick="openProjectModal()">＋ 新增專案</button>
+        <button class="btn btn-dark admin-only" onclick="openProjectModal()">＋ 新增專案</button>
       </div>
       <div id="project-list"></div>
     </div>
@@ -1069,6 +1139,10 @@
 <div class="modal-overlay" id="todo-modal">
   <div class="modal">
     <h3 id="todo-modal-title">新增待辦</h3>
+    <div class="form-group">
+      <label>指派到工作區</label>
+      <select id="todo-ws"></select>
+    </div>
     <div class="form-group">
       <label>任務名稱 *</label>
       <input id="todo-text" type="text" placeholder="輸入任務內容" />
@@ -1107,6 +1181,10 @@
   <div class="modal">
     <h3 id="project-modal-title">新增專案</h3>
     <div class="form-group">
+      <label>所屬工作區（變更即移動專案，連同注意事項）</label>
+      <select id="proj-ws"></select>
+    </div>
+    <div class="form-group">
       <label>專案名稱 *</label>
       <input id="proj-name" type="text" placeholder="例：星銘 Starite 品牌識別" />
     </div>
@@ -1128,6 +1206,10 @@
       <label>截止日期</label>
       <input id="proj-deadline" type="date" />
     </div>
+    <div class="finance-only">
+    <div id="proj-fin-warn" style="display:none;color:#c0392b;font-size:12px;margin-bottom:8px">
+      目前讀不到收付款資料表（尚未執行資料庫設定，或網路異常），收付款日期暫時無法編輯。
+    </div>
     <div class="form-group">
       <label>發票日期</label>
       <input id="proj-invoice" type="date" />
@@ -1139,6 +1221,7 @@
     <div class="form-group">
       <label>收款日期（實際）</label>
       <input id="proj-pay-actual" type="date" />
+    </div>
     </div>
     <input type="hidden" id="proj-edit-id" />
     <div class="modal-actions">
@@ -1169,20 +1252,6 @@
   </div>
 </div>
 
-<!-- ──────────────── WORKSPACE OVERVIEW MODAL（管理者） ──────────────── -->
-<div class="modal-overlay" id="admin-modal">
-  <div class="modal" style="max-width:560px">
-    <h3>工作區總覽</h3>
-    <p style="font-size:13px;color:var(--text-muted);margin-bottom:1.2rem;line-height:1.7">
-      以下為目前的工作區，可直接進入檢視。新增或刪除工作區、變更密碼，請至 Supabase 後台操作（見操作手冊）。
-    </p>
-    <div id="admin-ws-list" style="display:flex;flex-direction:column;gap:8px;max-height:320px;overflow-y:auto"></div>
-    <div class="modal-actions" style="margin-top:1.5rem">
-      <button class="btn btn-dark" onclick="closeAdminModal()">關閉</button>
-    </div>
-  </div>
-</div>
-
 <!-- ──────────────── TOAST ──────────────── -->
 <div class="toast hidden" id="toast"></div>
 
@@ -1199,6 +1268,8 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 // 工作區帳號對應的 Supabase Auth 登入信箱（帳號為手動建立並自動確認，不會寄信）
 const WS_EMAIL_DOMAIN = 'vetica-taipei.com';
 const wsEmail = ws => `ws-${ws}@${WS_EMAIL_DOMAIN}`;
+const STATUSES = ['提案中', '進行中', '已完成', '暫停', '取消'];
+const REFRESH_MS = 30000;
 
 // 資料請求若遭拒（401 登入逾時 / 403 無權限），統一提示，避免寫入失敗卻毫無訊息
 let authFailTimer = null;
@@ -1208,10 +1279,16 @@ function onDataAuthFailure(status) {
   authFailTimer = setTimeout(() => showToast('權限不足，操作未被儲存'), 150);
 }
 
+// dataSeq：每次寫入前後各 +1。背景更新若在讀取期間發生過寫入，就丟棄這次結果，避免舊資料蓋掉新資料
+let dataSeq = 0;
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   global: {
     fetch: async (input, init) => {
+      const method = String((init && init.method) || 'GET').toUpperCase();
+      const isWrite = method !== 'GET' && method !== 'HEAD';
+      if (isWrite) dataSeq++;
       const res = await fetch(input, init);
+      if (isWrite) dataSeq++;
       try {
         const url = typeof input === 'string' ? input : (input && input.url) || '';
         if (url.includes('/rest/v1/') && (res.status === 401 || res.status === 403)) onDataAuthFailure(res.status);
@@ -1221,11 +1298,15 @@ const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   }
 });
 
-let WS = '', USER = '', currentFilter = 'all', isAdmin = false;
+let WS = '', USER = '', currentFilter = 'all', isAdmin = false, currentTab = 'todos';
+// all*：目前帳號能讀到的全部資料（管理者＝所有工作區）；todos/projects/notes：目前檢視工作區的子集
+let allTodos = [], allProjects = [], allNotes = [], allWorkspaces = [];
 let todos = [], projects = [], notes = [];
 let calYear, calMonth;
 
-let sessionIsAdmin = false;
+let sessionRole = '';      // 'admin' 最高管理者 / 'manager' 內部管理者 / '' 一般工作區帳號
+let isFinance = false;     // 僅 admin 可見收付款日期
+let financeOk = false;   // 管理者：收付款資料表是否讀取成功（失敗時不允許覆寫收付款日期）
 
 // Restore session（由 Supabase Auth 管理登入狀態，瀏覽器僅另存顯示用姓名）
 (async function initSession() {
@@ -1239,7 +1320,7 @@ let sessionIsAdmin = false;
     try { name = (JSON.parse(localStorage.getItem('vt-session') || '{}').user) || ''; } catch (e) {}
     WS = meta.workspace;
     USER = name || '成員';
-    sessionIsAdmin = meta.role === 'admin';
+    sessionRole = meta.role || '';
     bootApp();
   } catch (e) {}
 })();
@@ -1261,7 +1342,10 @@ async function doLogin() {
   errEl.style.display = 'none';
 
   if (!wsRaw || !name || !pw) { fail('請填寫所有欄位'); return; }
-  const ws = wsRaw.toLowerCase();
+  let ws = wsRaw.toLowerCase();
+  // 容許貼上完整登入信箱（ws-名稱@網域），自動取出工作區名稱
+  const mail = ws.match(/^ws-([a-z0-9-]+)@/);
+  if (mail) ws = mail[1];
   if (!/^[a-z0-9-]+$/.test(ws)) { fail('工作區名稱僅限英文小寫、數字與連字號'); return; }
 
   btn.disabled = true;
@@ -1272,13 +1356,13 @@ async function doLogin() {
       return;
     }
     const meta = data.user.app_metadata || {};
-    const isAdminAcct = meta.role === 'admin';
-    if (meta.workspace !== ws || (ws === 'admin' && !isAdminAcct)) {
+    const role = meta.role || '';
+    if (meta.workspace !== ws || (ws === 'admin' && role !== 'admin')) {
       await sb.auth.signOut();
       fail('此帳號尚未完成工作區設定，請聯絡管理者');
       return;
     }
-    WS = ws; USER = name; sessionIsAdmin = isAdminAcct;
+    WS = ws; USER = name; sessionRole = role;
     localStorage.setItem('vt-session', JSON.stringify({ user: USER }));
     document.getElementById('ws-password').value = '';
     bootApp();
@@ -1295,16 +1379,23 @@ async function doLogout() {
 }
 
 function resetToLogin() {
+  stopAutoRefresh();
   localStorage.removeItem('vt-session');
-  WS = ''; USER = ''; isAdmin = false; sessionIsAdmin = false;
+  WS = ''; USER = ''; isAdmin = false; isFinance = false; sessionRole = ''; lastSync = null;
+  allTodos = []; allProjects = []; allNotes = []; allWorkspaces = [];
   todos = []; projects = []; notes = [];
+  document.body.classList.remove('is-admin', 'is-finance');
   document.getElementById('ws-switcher').classList.remove('visible');
+  document.getElementById('sync-label').textContent = '';
   document.getElementById('app').style.display = 'none';
   document.getElementById('login-screen').style.display = 'flex';
 }
 
-function bootApp() {
-  isAdmin = sessionIsAdmin;
+async function bootApp() {
+  isAdmin = sessionRole === 'admin' || sessionRole === 'manager';   // 管理人員：跨工作區檢視與編輯
+  isFinance = sessionRole === 'admin';                               // 收付款日期僅 admin
+  document.body.classList.toggle('is-admin', isAdmin);
+  document.body.classList.toggle('is-finance', isFinance);
   document.getElementById('login-screen').style.display = 'none';
   document.getElementById('app').style.display = 'block';
   document.getElementById('user-label').textContent = USER;
@@ -1313,78 +1404,188 @@ function bootApp() {
   calYear = now.getFullYear(); calMonth = now.getMonth();
 
   if (isAdmin) {
-    // 管理者：顯示切換器，預設進入第一個非 admin 工作區
+    // 管理者：先進「全部工作區總覽」；待辦/行事曆/專案三頁檢視所選工作區
     document.getElementById('ws-switcher').classList.add('visible');
-    loadWorkspaceSwitcher().then(() => {
-      // 若 WS 仍是 admin，切換到第一個可用工作區
-      if (WS === 'admin') {
-        const first = document.querySelector('.ws-dropdown-item');
-        if (first) {
-          const name = first.dataset.name;
-          if (name) switchToWorkspace(name);
-          return;
-        }
-      }
-      updateWsLabel();
-      loadAllAndRender();
-    });
+    await loadWorkspaceSwitcher();
+    if (!allWorkspaces.some(w => w.name === WS)) WS = allWorkspaces.length ? allWorkspaces[0].name : WS;
+    showTab('overview');
   } else {
     document.getElementById('ws-switcher').classList.remove('visible');
-    updateWsLabel();
-    loadAllAndRender();
+    showTab('todos');
   }
+  await loadAll();
+  startAutoRefresh();
 }
 
 function updateWsLabel() {
-  document.getElementById('ws-label').textContent = WS;
+  const label = (isAdmin && currentTab === 'overview') ? '全部工作區' : WS;
+  document.getElementById('ws-label').textContent = label;
   document.getElementById('ws-current-name').textContent = WS;
 }
 
-async function loadAllAndRender() {
-  await loadAll();
-}
-
 // ═══════════════════════════════════════════════
-//  DATA LOADING
+//  DATA LOADING（取回後一律以 applyViews 切出「目前工作區」的子集）
 // ═══════════════════════════════════════════════
-async function loadAll() {
-  await Promise.all([loadTodos(), loadProjects(), loadNotes()]);
-  renderTodos();
-  renderCalendar();
-  renderProjects();
+function bySort(a, b) {
+  const x = a.sort_order == null ? 1e9 : a.sort_order;
+  const y = b.sort_order == null ? 1e9 : b.sort_order;
+  return x - y;
 }
 
-async function loadTodos() {
-  const { data } = await sb.from('todos').select('*').eq('workspace', WS).order('sort_order');
-  todos = data || [];
+function applyViews() {
+  todos = allTodos.filter(t => t.workspace === WS).sort(bySort);
+  projects = allProjects.filter(p => p.workspace === WS).sort(bySort);
+  notes = allNotes.filter(n => n.workspace === WS);
 }
 
-async function loadProjects() {
+async function fetchTodos() {
+  let q = sb.from('todos').select('*');
+  if (!isAdmin) q = q.eq('workspace', WS);
+  const { data, error } = await q.order('sort_order');
+  return error ? null : (data || []);
+}
+
+async function fetchProjects() {
+  const base = () => { let q = sb.from('projects').select('*'); if (!isAdmin) q = q.eq('workspace', WS); return q; };
   // 優先以 sort_order 排序；若資料表尚未新增 sort_order 欄位，退回以建立時間排序
-  let { data, error } = await sb.from('projects').select('*').eq('workspace', WS)
+  let { data, error } = await base()
     .order('sort_order', { ascending: true, nullsFirst: false })
     .order('created_at', { ascending: true });
   if (error) {
-    const res = await sb.from('projects').select('*').eq('workspace', WS).order('created_at');
-    data = res.data;
+    const res = await base().order('created_at');
+    data = res.data; error = res.error;
   }
-  projects = data || [];
+  if (error) return null;
+  // 發票／收款日期只有管理者讀得到（獨立資料表），合併回專案物件供畫面使用
+  const fin = {};
+  let finOk = false;
+  if (isFinance) {
+    const r = await sb.from('project_finance').select('*');
+    if (!r.error) { finOk = true; (r.data || []).forEach(f => { fin[f.project_id] = f; }); }
+  }
+  financeOk = finOk;
+  return (data || []).map(p => {
+    if (!isFinance || !finOk) return p;
+    const f = fin[p.id] || {};
+    return { ...p, invoice_date: f.invoice_date || null, payment_estimated: f.payment_estimated || null, payment_actual: f.payment_actual || null };
+  });
 }
 
-async function loadNotes() {
-  const { data } = await sb.from('notes').select('*').eq('workspace', WS).order('created_at');
-  notes = data || [];
+async function fetchNotes() {
+  let q = sb.from('notes').select('*');
+  if (!isAdmin) q = q.eq('workspace', WS);
+  const { data, error } = await q.order('created_at');
+  return error ? null : (data || []);
 }
+
+async function fetchWorkspaces() {
+  const { data, error } = await sb.from('workspaces').select('name,description,created_at').order('created_at');
+  return error ? null : (data || []).filter(w => w.name !== 'admin');
+}
+
+async function loadTodos()    { const d = await fetchTodos();    if (d) { allTodos = d;    applyViews(); } }
+async function loadProjects() { const d = await fetchProjects(); if (d) { allProjects = d; applyViews(); } }
+async function loadNotes()    { const d = await fetchNotes();    if (d) { allNotes = d;    applyViews(); } }
+
+async function loadAll() {
+  await Promise.all([loadTodos(), loadProjects(), loadNotes()]);
+  lastSync = new Date();
+  renderAll();
+}
+
+function renderAll() {
+  renderTodos();
+  renderCalendar();
+  renderProjects();
+  if (isAdmin) renderOverview();
+  updateSyncLabel();
+}
+
+// ═══════════════════════════════════════════════
+//  AUTO REFRESH（每 30 秒背景更新 + 手動更新）
+// ═══════════════════════════════════════════════
+let refreshTimer = null, lastSync = null, refreshing = false;
+
+function startAutoRefresh() {
+  stopAutoRefresh();
+  refreshTimer = setInterval(() => refreshData(true), REFRESH_MS);
+}
+function stopAutoRefresh() { if (refreshTimer) clearInterval(refreshTimer); refreshTimer = null; }
+
+function anyModalOpen() { return !!document.querySelector('.modal-overlay.open'); }
+
+function dataSig() { return JSON.stringify([allTodos, allProjects, allNotes, allWorkspaces]); }
+
+async function refreshData(silent) {
+  if (!WS || refreshing) return;
+  if (silent && (document.hidden || anyModalOpen() || dragId || projDragId)) return;
+  refreshing = true;
+  const seq = dataSeq;
+  try {
+    const [t, p, n, w] = await Promise.all([
+      fetchTodos(), fetchProjects(), fetchNotes(), isAdmin ? fetchWorkspaces() : Promise.resolve(allWorkspaces)
+    ]);
+    if (!WS) return;                 // 期間已登出
+    if (seq !== dataSeq) return;     // 期間有寫入，放棄這次結果，等下一輪
+    if (!t || !p || !n || !w) { if (!silent) showToast('更新失敗，請稍後再試'); return; }
+    const before = dataSig();
+    allTodos = t; allProjects = p; allNotes = n; allWorkspaces = w;
+    if (isAdmin && !allWorkspaces.some(x => x.name === WS) && allWorkspaces.length) WS = allWorkspaces[0].name;
+    applyViews();
+    lastSync = new Date();
+    if (dataSig() !== before) { renderWsDropdown(); renderAll(); } else updateSyncLabel();
+    if (!silent) showToast('已更新');
+  } finally {
+    refreshing = false;
+  }
+}
+
+function manualRefresh() { refreshData(false); }
+
+function updateSyncLabel() {
+  const el = document.getElementById('sync-label');
+  if (!el) return;
+  el.textContent = lastSync ? `更新於 ${pad2(lastSync.getHours())}:${pad2(lastSync.getMinutes())}:${pad2(lastSync.getSeconds())}` : '';
+}
+
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden && WS && lastSync && Date.now() - lastSync.getTime() > REFRESH_MS - 5000) refreshData(true);
+});
 
 // ═══════════════════════════════════════════════
 //  TABS
 // ═══════════════════════════════════════════════
-function switchTab(name, btn) {
-  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
-  document.querySelectorAll('.tab-nav button').forEach(b => b.classList.remove('active'));
-  document.getElementById('tab-' + name).classList.add('active');
-  btn.classList.add('active');
+function showTab(name) {
+  currentTab = name;
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.id === 'tab-' + name));
+  document.querySelectorAll('.tab-nav button').forEach(b => b.classList.toggle('active', b.dataset.tab === name));
   if (name === 'calendar') renderCalendar();
+  updateWsLabel();
+}
+
+// ═══════════════════════════════════════════════
+//  共用：工作區下拉、子任務工具
+// ═══════════════════════════════════════════════
+function fillWsSelect(sel, value) {
+  const names = allWorkspaces.map(w => w.name);
+  if (value && !names.includes(value)) names.push(value);
+  sel.innerHTML = names.map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join('');
+  sel.value = value || names[0] || '';
+}
+
+function nodeAt(subs, path) {
+  let arr = subs, node = null;
+  for (const i of path) {
+    if (!Array.isArray(arr) || !arr[i]) return null;
+    node = arr[i]; arr = node.children;
+  }
+  return node;
+}
+
+function projProgress(p) {
+  const s = p.subs || [];
+  if (!s.length) return null;
+  return Math.round(s.reduce((a, x) => a + (Number(x.pct) || 0), 0) / s.length);
 }
 
 // ═══════════════════════════════════════════════
@@ -1392,7 +1593,7 @@ function switchTab(name, btn) {
 // ═══════════════════════════════════════════════
 function setFilter(btn, f) {
   currentFilter = f;
-  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('#todo-filters .filter-btn').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
   renderTodos();
 }
@@ -1417,12 +1618,12 @@ function renderTodos() {
   const priClass = { high: 'tag-high', mid: 'tag-mid', low: 'tag-low' };
 
   list.innerHTML = filtered.map(t => `
-    <div class="todo-item" draggable="true"
-      data-id="${t.id}"
+    <div class="todo-item" ${isAdmin ? `draggable="true"
       ondragstart="dragStart(event)"
       ondragover="dragOver(event)"
       ondrop="dropTodo(event)"
-      ondragleave="dragLeave(event)">
+      ondragleave="dragLeave(event)"` : ''}
+      data-id="${t.id}">
       <input type="checkbox" class="todo-check" ${t.done ? 'checked' : ''}
         onchange="toggleTodo('${t.id}', this.checked)" />
       <div class="todo-body">
@@ -1434,19 +1635,21 @@ function renderTodos() {
         </div>
         ${t.note ? `<div class="todo-note">${esc(t.note)}</div>` : ''}
       </div>
-      <div class="todo-actions">
+      ${isAdmin ? `<div class="todo-actions">
         <button class="btn btn-sm btn-icon" onclick="editTodo('${t.id}')">✎</button>
         <button class="btn btn-sm btn-icon" onclick="deleteTodo('${t.id}')" style="color:#c0392b">✕</button>
-      </div>
+      </div>` : ''}
     </div>
   `).join('');
 }
 
-// ── Modal ──
-function openTodoModal(id) {
-  document.getElementById('todo-modal-title').textContent = id ? '編輯待辦' : '新增待辦';
+// ── Modal（僅管理者；可指派到任一工作區）──
+function openTodoModal(id, ws) {
+  if (!isAdmin) return;
+  document.getElementById('todo-modal-title').textContent = id ? '編輯待辦' : '指派／新增待辦';
   document.getElementById('todo-edit-id').value = id || '';
-  const t = id ? todos.find(x => x.id === id) : null;
+  const t = id ? allTodos.find(x => x.id === id) : null;
+  fillWsSelect(document.getElementById('todo-ws'), t ? t.workspace : (ws || WS));
   document.getElementById('todo-text').value = t ? t.text : '';
   document.getElementById('todo-priority').value = t ? (t.priority || '') : '';
   document.getElementById('todo-member').value = t ? (t.member || '') : '';
@@ -1464,6 +1667,7 @@ async function saveTodo() {
   const text = document.getElementById('todo-text').value.trim();
   if (!text) { showToast('請輸入任務名稱'); return; }
   const id = document.getElementById('todo-edit-id').value;
+  const targetWs = document.getElementById('todo-ws').value || WS;
   const payload = {
     text,
     priority: document.getElementById('todo-priority').value || null,
@@ -1472,23 +1676,24 @@ async function saveTodo() {
     note: document.getElementById('todo-note').value.trim() || null,
   };
 
+  let error;
   if (id) {
-    await sb.from('todos').update(payload).eq('id', id);
-    showToast('已更新');
+    ({ error } = await sb.from('todos').update({ ...payload, workspace: targetWs }).eq('id', id));
+    if (!error) showToast('已更新');
   } else {
-    const newId = 'td-' + Date.now();
-    const maxOrder = todos.length ? Math.max(...todos.map(t => t.sort_order || 0)) : 0;
-    await sb.from('todos').insert({
-      id: newId, workspace: WS, created_by: USER,
+    const inWs = allTodos.filter(t => t.workspace === targetWs);
+    const maxOrder = inWs.length ? Math.max(...inWs.map(t => t.sort_order || 0)) : 0;
+    ({ error } = await sb.from('todos').insert({
+      id: 'td-' + Date.now(), workspace: targetWs, created_by: USER,
       sort_order: maxOrder + 1, done: false, ...payload
-    });
-    showToast('已新增');
+    }));
+    if (!error) showToast(targetWs === WS ? '已新增' : `已指派到 ${targetWs}`);
   }
+  if (error) { showToast('儲存失敗，請稍後再試'); return; }
 
   closeTodoModal();
   await loadTodos();
-  renderTodos();
-  renderCalendar();
+  renderAll();
 }
 
 function editTodo(id) { openTodoModal(id); }
@@ -1497,31 +1702,35 @@ async function deleteTodo(id) {
   if (!confirm('確定刪除此待辦？')) return;
   await sb.from('todos').delete().eq('id', id);
   await loadTodos();
-  renderTodos();
-  renderCalendar();
+  renderAll();
   showToast('已刪除');
 }
 
 async function toggleTodo(id, done) {
-  await sb.from('todos').update({ done }).eq('id', id);
-  const t = todos.find(x => x.id === id);
+  const { data, error } = await sb.from('todos').update({ done }).eq('id', id).select('id');
+  if (error || !data || !data.length) {
+    showToast('無法更新，已重新載入最新狀態');
+    await loadTodos();
+    renderAll();
+    return;
+  }
+  const t = allTodos.find(x => x.id === id);
   if (t) t.done = done;
-  renderTodos();
+  applyViews();
+  renderAll();
 }
 
 async function tidyTodos() {
   const active = todos.filter(t => !t.done);
   const done = todos.filter(t => t.done);
   const reordered = [...active, ...done];
-  for (let i = 0; i < reordered.length; i++) {
-    await sb.from('todos').update({ sort_order: i }).eq('id', reordered[i].id);
-  }
+  await Promise.all(reordered.map((t, i) => sb.from('todos').update({ sort_order: i }).eq('id', t.id)));
   await loadTodos();
-  renderTodos();
+  renderAll();
   showToast('整理完成');
 }
 
-// ── Drag & Drop ──
+// ── Drag & Drop（管理者）──
 let dragId = null;
 
 function dragStart(e) {
@@ -1546,15 +1755,16 @@ async function dropTodo(e) {
     el.classList.remove('dragging');
     el.classList.remove('drag-over');
   });
-  if (!dragId || dragId === targetId) return;
-  const from = todos.findIndex(t => t.id === dragId);
-  const to = todos.findIndex(t => t.id === targetId);
-  todos.splice(to, 0, todos.splice(from, 1)[0]);
-  for (let i = 0; i < todos.length; i++) {
-    await sb.from('todos').update({ sort_order: i }).eq('id', todos[i].id);
-  }
-  renderTodos();
+  const fromId = dragId;
   dragId = null;
+  if (!fromId || fromId === targetId) return;
+  const from = todos.findIndex(t => t.id === fromId);
+  const to = todos.findIndex(t => t.id === targetId);
+  if (from < 0 || to < 0) return;
+  todos.splice(to, 0, todos.splice(from, 1)[0]);
+  todos.forEach((t, i) => { t.sort_order = i; });
+  renderTodos();
+  await Promise.all(todos.map((t, i) => sb.from('todos').update({ sort_order: i }).eq('id', t.id)));
 }
 
 // ═══════════════════════════════════════════════
@@ -1585,11 +1795,13 @@ function renderCalendar() {
   };
 
   todos.forEach(t => { if (t.date) addEv(t.date, 'todo', t.text); });
-  projects.forEach(p => {
-    if (p.invoice_date) addEv(p.invoice_date, 'invoice', p.name + ' 發票');
-    if (p.payment_estimated) addEv(p.payment_estimated, 'pay-est', p.name + ' 預估收款');
-    if (p.payment_actual) addEv(p.payment_actual, 'pay-actual', p.name + ' 實際收款');
-  });
+  if (isFinance) {
+    projects.forEach(p => {
+      if (p.invoice_date) addEv(p.invoice_date, 'invoice', p.name + ' 發票');
+      if (p.payment_estimated) addEv(p.payment_estimated, 'pay-est', p.name + ' 預估收款');
+      if (p.payment_actual) addEv(p.payment_actual, 'pay-actual', p.name + ' 實際收款');
+    });
+  }
 
   const typeClass = { todo: 'cal-dot-todo', invoice: 'cal-dot-invoice', 'pay-est': 'cal-dot-payment-est', 'pay-actual': 'cal-dot-payment-actual' };
 
@@ -1620,10 +1832,15 @@ function renderCalendar() {
 // ═══════════════════════════════════════════════
 //  PROJECTS
 // ═══════════════════════════════════════════════
-function openProjectModal(id) {
+let projOrigWs = '';
+
+function openProjectModal(id, ws) {
+  if (!isAdmin) return;
   document.getElementById('project-modal-title').textContent = id ? '編輯專案' : '新增專案';
   document.getElementById('proj-edit-id').value = id || '';
-  const p = id ? projects.find(x => x.id === id) : null;
+  const p = id ? allProjects.find(x => x.id === id) : null;
+  projOrigWs = p ? p.workspace : '';
+  fillWsSelect(document.getElementById('proj-ws'), p ? p.workspace : (ws || WS));
   document.getElementById('proj-name').value = p ? p.name : '';
   document.getElementById('proj-member').value = p ? (p.member || '') : '';
   document.getElementById('proj-status').value = p ? (p.status || '提案中') : '提案中';
@@ -1631,6 +1848,8 @@ function openProjectModal(id) {
   document.getElementById('proj-invoice').value = p ? (p.invoice_date || '') : '';
   document.getElementById('proj-pay-est').value = p ? (p.payment_estimated || '') : '';
   document.getElementById('proj-pay-actual').value = p ? (p.payment_actual || '') : '';
+  ['proj-invoice', 'proj-pay-est', 'proj-pay-actual'].forEach(i => { document.getElementById(i).disabled = !financeOk; });
+  document.getElementById('proj-fin-warn').style.display = (isFinance && !financeOk) ? 'block' : 'none';
   document.getElementById('project-modal').classList.add('open');
   setTimeout(() => document.getElementById('proj-name').focus(), 80);
 }
@@ -1643,50 +1862,68 @@ async function saveProject() {
   const name = document.getElementById('proj-name').value.trim();
   if (!name) { showToast('請輸入專案名稱'); return; }
   const id = document.getElementById('proj-edit-id').value;
+  const targetWs = document.getElementById('proj-ws').value || WS;
   const payload = {
     name,
     member: document.getElementById('proj-member').value.trim() || null,
     status: document.getElementById('proj-status').value,
     deadline: document.getElementById('proj-deadline').value || null,
+  };
+  const finance = {
     invoice_date: document.getElementById('proj-invoice').value || null,
     payment_estimated: document.getElementById('proj-pay-est').value || null,
     payment_actual: document.getElementById('proj-pay-actual').value || null,
   };
+  const hasFinance = Object.values(finance).some(Boolean);
 
+  let projId = id, msg;
   if (id) {
-    await sb.from('projects').update(payload).eq('id', id);
-    showToast('專案已更新');
+    const r = await sb.from('projects').update(payload).eq('id', id).select('id');
+    if (r.error || !r.data || !r.data.length) { showToast('儲存失敗，請稍後再試'); return; }
+    msg = '專案已更新';
   } else {
-    const newId = 'pr-' + Date.now();
-    const maxOrder = projects.length ? Math.max(...projects.map(p => p.sort_order || 0)) : -1;
+    projId = 'pr-' + Date.now();
+    const inWs = allProjects.filter(p => p.workspace === targetWs);
+    const maxOrder = inWs.length ? Math.max(...inWs.map(p => p.sort_order || 0)) : -1;
     let { error } = await sb.from('projects').insert({
-      id: newId, workspace: WS, created_by: USER,
+      id: projId, workspace: targetWs, created_by: USER,
       subs: [], sort_order: maxOrder + 1, ...payload
     });
     if (error) {
       // 資料表尚無 sort_order 欄位時，退回不含排序欄位的寫入
-      await sb.from('projects').insert({
-        id: newId, workspace: WS, created_by: USER,
-        subs: [], ...payload
-      });
+      ({ error } = await sb.from('projects').insert({
+        id: projId, workspace: targetWs, created_by: USER, subs: [], ...payload
+      }));
     }
-    showToast('專案已新增');
+    if (error) { showToast('新增失敗，請稍後再試'); return; }
+    msg = targetWs === WS ? '專案已新增' : `專案已新增到 ${targetWs}`;
+  }
+
+  // 收付款日期（僅管理者可存取的資料表）
+  if (financeOk && (id || hasFinance)) {
+    const r = await sb.from('project_finance').upsert({ project_id: projId, ...finance }, { onConflict: 'project_id' });
+    if (r.error) { showToast('收付款日期儲存失敗'); }
+  }
+
+  // 變更所屬工作區：專案與其注意事項一併移動
+  if (id && projOrigWs && targetWs !== projOrigWs) {
+    const r = await sb.rpc('move_project', { p_id: id, p_workspace: targetWs });
+    if (r.error) { showToast('移動工作區失敗：' + (r.error.message || '')); }
+    else msg = `專案已更新，並移到 ${targetWs}`;
   }
 
   closeProjectModal();
-  await loadProjects();
-  renderProjects();
-  renderCalendar();
+  await Promise.all([loadProjects(), loadNotes()]);
+  renderAll();
+  showToast(msg);
 }
 
 async function deleteProject(id) {
   if (!confirm('確定刪除此專案？（包含所有子任務與注意事項）')) return;
   await sb.from('notes').delete().eq('project_id', id);
   await sb.from('projects').delete().eq('id', id);
-  await loadProjects();
-  await loadNotes();
-  renderProjects();
-  renderCalendar();
+  await Promise.all([loadProjects(), loadNotes()]);
+  renderAll();
   showToast('已刪除');
 }
 
@@ -1704,39 +1941,49 @@ function restoreOpenProjects(ids) {
 
 function renderProjects() {
   const openIds = getOpenProjectIds();
+  // 背景更新重畫時，保留尚未送出的注意事項草稿與游標
+  const drafts = {};
+  document.querySelectorAll('textarea[id^="note-input-"]').forEach(t => { if (t.value) drafts[t.id] = t.value; });
+  const active = document.activeElement;
+  const focusId = active && active.id && active.id.startsWith('note-input-') ? active.id : null;
+  const selStart = focusId ? active.selectionStart : 0;
+
   const list = document.getElementById('project-list');
   if (!projects.length) {
-    list.innerHTML = '<div class="empty-state"><span class="icon">📁</span>尚無專案，點擊「+ 新增專案」開始</div>';
+    list.innerHTML = isAdmin
+      ? '<div class="empty-state"><span class="icon">📁</span>此工作區尚無專案，點擊「+ 新增專案」開始</div>'
+      : '<div class="empty-state"><span class="icon">📁</span>目前尚未指派專案</div>';
     return;
   }
 
   list.innerHTML = projects.map(p => {
-    const subs = p.subs || [];
     const projNotes = notes.filter(n => n.project_id === p.id);
+    const prog = projProgress(p);
 
     return `
     <div class="project-card" id="pc-${p.id}" data-id="${p.id}"
-      ondragstart="projDragStart(event)"
+      ${isAdmin ? `ondragstart="projDragStart(event)"
       ondragover="projDragOver(event)"
       ondragleave="projDragLeave(event)"
       ondrop="projDrop(event)"
-      ondragend="projDragEnd(event)">
+      ondragend="projDragEnd(event)"` : ''}>
       <div class="project-header" onclick="toggleProject('${p.id}')">
-        <span class="project-drag-handle" title="拖曳調整順序"
+        ${isAdmin ? `<span class="project-drag-handle" title="拖曳調整順序"
           onmousedown="projHandleDown(event)" onmouseup="projHandleUp(event)"
           ontouchstart="projHandleDown(event)"
-          onclick="event.stopPropagation()">⋮⋮</span>
+          onclick="event.stopPropagation()">⋮⋮</span>` : ''}
         <button class="project-expand-btn" id="exp-${p.id}">▶</button>
         <div class="project-name">${esc(p.name)}</div>
         <div class="project-meta">
           <span class="status-badge status-${p.status}">${p.status}</span>
+          ${prog !== null ? `<span class="proj-pct">進度 ${prog}%</span>` : ''}
           ${p.deadline ? `<span class="text-muted">截止 ${p.deadline}</span>` : ''}
           ${p.member ? `<span class="tag tag-member" style="font-size:11px">${esc(p.member)}</span>` : ''}
         </div>
-        <div style="display:flex;gap:6px;margin-left:8px" onclick="event.stopPropagation()">
+        ${isAdmin ? `<div style="display:flex;gap:6px;margin-left:8px" onclick="event.stopPropagation()">
           <button class="btn btn-sm" onclick="openProjectModal('${p.id}')">編輯</button>
           <button class="btn btn-sm" style="color:#c0392b" onclick="deleteProject('${p.id}')">刪除</button>
-        </div>
+        </div>` : ''}
       </div>
 
       <div class="project-body" id="pb-${p.id}">
@@ -1744,16 +1991,16 @@ function renderProjects() {
         <div class="project-details">
           ${detailItem('負責人', p.member)}
           ${detailItem('截止日期', p.deadline)}
-          ${detailItem('發票日期', p.invoice_date)}
-          ${detailItem('預估收款', p.payment_estimated)}
-          ${detailItem('實際收款', p.payment_actual)}
+          ${isFinance ? detailItem('發票日期', p.invoice_date) : ''}
+          ${isFinance ? detailItem('預估收款', p.payment_estimated) : ''}
+          ${isFinance ? detailItem('實際收款', p.payment_actual) : ''}
         </div>
 
         <!-- Subtasks -->
         <div class="subtasks-section">
           <div class="subtasks-header">
-            <span class="subtasks-title">子任務</span>
-            <button class="btn btn-sm" onclick="openSubModal('${p.id}', null)">＋ 新增</button>
+            <span class="subtasks-title">子任務${isAdmin ? '' : '（可於右側更新進度）'}</span>
+            ${isAdmin ? `<button class="btn btn-sm" onclick="openSubModal('${p.id}', null)">＋ 新增</button>` : ''}
           </div>
           ${renderSubtasks(p)}
         </div>
@@ -1765,10 +2012,10 @@ function renderProjects() {
             <div class="note-item">
               <div class="note-content">${esc(n.content)}</div>
               <div class="note-meta">by ${esc(n.created_by || '—')} · ${fmtDate(n.created_at)}</div>
-              <div class="note-actions">
+              ${isAdmin ? `<div class="note-actions">
                 <button class="btn btn-sm btn-icon" onclick="editNote('${n.id}','${p.id}')">✎</button>
                 <button class="btn btn-sm btn-icon" style="color:#c0392b" onclick="deleteNote('${n.id}')">✕</button>
-              </div>
+              </div>` : ''}
             </div>
           `).join('')}
           <div class="add-note-row">
@@ -1782,9 +2029,14 @@ function renderProjects() {
   }).join('');
 
   restoreOpenProjects(openIds);
+  Object.keys(drafts).forEach(id => { const t = document.getElementById(id); if (t) t.value = drafts[id]; });
+  if (focusId) {
+    const t = document.getElementById(focusId);
+    if (t) { t.focus(); try { t.setSelectionRange(selStart, selStart); } catch (e) {} }
+  }
 }
 
-// ─── Project Drag & Drop（以左側 ⋮⋮ 把手拖曳）───
+// ─── Project Drag & Drop（以左側 ⋮⋮ 把手拖曳；管理者）───
 let projDragId = null;
 
 function projHandleDown(e) {
@@ -1846,7 +2098,7 @@ async function projDrop(e) {
   if (results.some(r => r.error)) {
     showToast('排序未能儲存：請先在 Supabase 新增 sort_order 欄位');
     await loadProjects();
-    renderProjects();
+    renderAll();
   } else {
     showToast('順序已更新');
   }
@@ -1874,22 +2126,34 @@ function renderSubtasks(p) {
   return subs.map((s, i) => renderSubRow(p.id, s, [i], 'l1')).join('');
 }
 
+function pctSelect(pid, pathStr, pct) {
+  const set = new Set([0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, pct]);
+  const opts = Array.from(set).sort((a, b) => a - b);
+  return `<select class="pct-select" title="更新進度" onchange="setSubPct('${pid}','${pathStr}', this.value)">
+    ${opts.map(v => `<option value="${v}" ${v === pct ? 'selected' : ''}>${v}%</option>`).join('')}
+  </select>`;
+}
+
 function renderSubRow(pid, sub, path, level) {
   const pathStr = JSON.stringify(path);
-  const pct = sub.pct || 0;
+  const pct = Number(sub.pct) || 0;
   let html = `
     <div class="subtask-row ${level}">
-      <span class="subtask-text">${esc(sub.text)}</span>
-      <span class="subtask-progress">${pct}%</span>
+      <span class="subtask-text">${esc(sub.text)}</span>`;
+  if (isAdmin) {
+    html += `<span class="subtask-progress">${pct}%</span>
       <div style="display:flex;gap:4px">
         <button class="btn btn-sm btn-icon" title="編輯" onclick="openSubModal('${pid}','${pathStr}')">✎</button>`;
-  if (level !== 'l3') {
-    html += `<button class="btn btn-sm btn-icon" title="新增子項目" onclick="openSubModal('${pid}',null,'${pathStr}')">＋</button>`;
-  }
-  html += `<button class="btn btn-sm btn-icon" title="加入待辦" onclick="subToTodo('${pid}','${pathStr}')">↓</button>
+    if (level !== 'l3') {
+      html += `<button class="btn btn-sm btn-icon" title="新增子項目" onclick="openSubModal('${pid}',null,'${pathStr}')">＋</button>`;
+    }
+    html += `<button class="btn btn-sm btn-icon" title="加入待辦" onclick="subToTodo('${pid}','${pathStr}')">↓</button>
         <button class="btn btn-sm btn-icon" style="color:#c0392b" onclick="deleteSub('${pid}','${pathStr}')">✕</button>
-      </div>
-    </div>`;
+      </div>`;
+  } else {
+    html += pctSelect(pid, pathStr, pct);
+  }
+  html += `</div>`;
 
   const barHtml = `<div style="margin-left:${level==='l1'?4:level==='l2'?24:44}px;margin-bottom:4px">
     <div class="progress-bar"><div class="progress-bar-fill" style="width:${pct}%"></div></div>
@@ -1906,19 +2170,62 @@ function renderSubRow(pid, sub, path, level) {
   return html;
 }
 
-// Sub Modal
+// 寫入子任務：先重新讀取該專案最新內容，再套用這次變更，避免覆蓋他人剛更新的資料
+async function mutateSubs(projId, fn, okMsg) {
+  const { data, error } = await sb.from('projects').select('subs').eq('id', projId).maybeSingle();
+  if (error || !data) { showToast('讀取專案失敗，請稍後再試'); return false; }
+  const subs = JSON.parse(JSON.stringify(data.subs || []));
+  if (fn(subs) === false) {
+    showToast('內容剛被其他人更新，已重新載入，請再操作一次');
+    await loadAll();
+    return false;
+  }
+  const res = await sb.from('projects').update({ subs }).eq('id', projId).select('id');
+  if (res.error || !res.data || !res.data.length) {
+    showToast('儲存失敗，已重新載入最新內容');
+    await loadAll();
+    return false;
+  }
+  const p = allProjects.find(x => x.id === projId);
+  if (p) p.subs = subs;
+  applyViews();
+  renderAll();
+  if (okMsg) showToast(okMsg);
+  return true;
+}
+
+// 工作區帳號：更新子任務進度
+async function setSubPct(projId, pathStr, val) {
+  const path = JSON.parse(pathStr);
+  const pct = Math.max(0, Math.min(100, parseInt(val, 10) || 0));
+  const cur = getSubByPath(projId, path);
+  if (!cur) return;
+  const expect = cur.text;
+  const ok = await mutateSubs(projId, subs => {
+    const n = nodeAt(subs, path);
+    if (!n || n.text !== expect) return false;
+    n.pct = pct;
+  }, '進度已更新');
+  if (!ok) renderProjects();
+}
+
+// Sub Modal（管理者）
 let subParentPath = null; // null = top-level
+let subEditOrig = null, subParentText = null;
 
 function openSubModal(projId, editPath, parentPath) {
+  if (!isAdmin) return;
   document.getElementById('sub-modal-title').textContent = editPath ? '編輯子任務' : '新增子任務';
   document.getElementById('sub-proj-id').value = projId;
   document.getElementById('sub-edit-path').value = editPath || '';
   subParentPath = parentPath ? JSON.parse(parentPath) : null;
+  subEditOrig = null; subParentText = null;
+  if (subParentPath) { const pn = getSubByPath(projId, subParentPath); subParentText = pn ? pn.text : null; }
 
   let text = '', pct = 0;
   if (editPath) {
     const sub = getSubByPath(projId, JSON.parse(editPath));
-    if (sub) { text = sub.text; pct = sub.pct || 0; }
+    if (sub) { text = sub.text; pct = sub.pct || 0; subEditOrig = sub.text; }
   }
   document.getElementById('sub-text').value = text;
   document.getElementById('sub-pct').value = pct;
@@ -1929,85 +2236,64 @@ function openSubModal(projId, editPath, parentPath) {
 function closeSubModal() { document.getElementById('sub-modal').classList.remove('open'); }
 
 function getSubByPath(projId, path) {
-  const p = projects.find(x => x.id === projId);
-  if (!p) return null;
-  let node = p.subs[path[0]];
-  for (let i = 1; i < path.length; i++) node = node.children[path[i]];
-  return node;
+  const p = allProjects.find(x => x.id === projId);
+  return p ? nodeAt(p.subs || [], path) : null;
 }
 
 async function saveSub() {
   const text = document.getElementById('sub-text').value.trim();
   if (!text) { showToast('請輸入子任務名稱'); return; }
-  const pct = parseInt(document.getElementById('sub-pct').value) || 0;
+  const pct = Math.max(0, Math.min(100, parseInt(document.getElementById('sub-pct').value) || 0));
   const projId = document.getElementById('sub-proj-id').value;
   const editPath = document.getElementById('sub-edit-path').value;
-  const p = projects.find(x => x.id === projId);
-  if (!p) return;
-
-  const subs = JSON.parse(JSON.stringify(p.subs || []));
-
-  if (editPath) {
-    // Edit existing
-    const path = JSON.parse(editPath);
-    let node = subs[path[0]];
-    for (let i = 1; i < path.length; i++) node = node.children[path[i]];
-    node.text = text; node.pct = pct;
-  } else if (subParentPath) {
-    // Add as child
-    let node = subs[subParentPath[0]];
-    for (let i = 1; i < subParentPath.length; i++) node = node.children[subParentPath[i]];
-    if (!node.children) node.children = [];
-    node.children.push({ text, pct, children: [] });
-  } else {
-    // Add top-level
-    subs.push({ text, pct, children: [] });
-  }
-
-  await sb.from('projects').update({ subs }).eq('id', projId);
+  const parentPath = subParentPath, origText = subEditOrig, parentText = subParentText;
   closeSubModal();
-  await loadProjects();
-  renderProjects();
+
+  await mutateSubs(projId, subs => {
+    if (editPath) {
+      const n = nodeAt(subs, JSON.parse(editPath));
+      if (!n || n.text !== origText) return false;
+      n.text = text; n.pct = pct;
+    } else if (parentPath) {
+      const n = nodeAt(subs, parentPath);
+      if (!n || n.text !== parentText) return false;
+      if (!n.children) n.children = [];
+      n.children.push({ text, pct, children: [] });
+    } else {
+      subs.push({ text, pct, children: [] });
+    }
+  }, '子任務已儲存');
   restoreOpenProjects([projId]);
-  showToast('子任務已儲存');
 }
 
 async function deleteSub(projId, pathStr) {
   if (!confirm('確定刪除？')) return;
-  const p = projects.find(x => x.id === projId);
-  if (!p) return;
-  const subs = JSON.parse(JSON.stringify(p.subs || []));
   const path = JSON.parse(pathStr);
-
-  if (path.length === 1) {
-    subs.splice(path[0], 1);
-  } else if (path.length === 2) {
-    subs[path[0]].children.splice(path[1], 1);
-  } else {
-    subs[path[0]].children[path[1]].children.splice(path[2], 1);
-  }
-
-  await sb.from('projects').update({ subs }).eq('id', projId);
-  await loadProjects();
-  renderProjects();
+  const cur = getSubByPath(projId, path);
+  if (!cur) return;
+  const expect = cur.text;
+  await mutateSubs(projId, subs => {
+    const n = nodeAt(subs, path);
+    if (!n || n.text !== expect) return false;
+    const arr = path.length === 1 ? subs : nodeAt(subs, path.slice(0, -1)).children;
+    arr.splice(path[path.length - 1], 1);
+  }, '已刪除');
   restoreOpenProjects([projId]);
-  showToast('已刪除');
 }
 
 async function subToTodo(projId, pathStr) {
   const sub = getSubByPath(projId, JSON.parse(pathStr));
-  const proj = projects.find(x => x.id === projId);
+  const proj = allProjects.find(x => x.id === projId);
   if (!sub || !proj) return;
-  const newId = 'td-' + Date.now();
   const maxOrder = todos.length ? Math.max(...todos.map(t => t.sort_order || 0)) : 0;
-  await sb.from('todos').insert({
-    id: newId, workspace: WS, created_by: USER,
+  const { error } = await sb.from('todos').insert({
+    id: 'td-' + Date.now(), workspace: proj.workspace, created_by: USER,
     text: `[${proj.name}] ${sub.text}`, done: false,
     sort_order: maxOrder + 1
   });
+  if (error) { showToast('加入待辦失敗'); return; }
   await loadTodos();
-  renderTodos();
-  renderCalendar();
+  renderAll();
   showToast('已加入待辦事項');
 }
 
@@ -2016,37 +2302,38 @@ async function addNote(projId) {
   const ta = document.getElementById('note-input-' + projId);
   const content = ta.value.trim();
   if (!content) return;
-  const newId = 'nt-' + Date.now();
-  await sb.from('notes').insert({
-    id: newId, workspace: WS, project_id: projId,
+  const proj = allProjects.find(x => x.id === projId);
+  const { error } = await sb.from('notes').insert({
+    id: 'nt-' + Date.now(), workspace: proj ? proj.workspace : WS, project_id: projId,
     content, created_by: USER
   });
+  if (error) { showToast('新增失敗，內容已保留，請稍後再試'); return; }
   ta.value = '';
   await loadNotes();
-  renderProjects();
+  renderAll();
   restoreOpenProjects([projId]);
   showToast('注意事項已新增');
 }
 
 async function editNote(noteId, projId) {
-  const n = notes.find(x => x.id === noteId);
+  const n = allNotes.find(x => x.id === noteId);
   if (!n) return;
   const content = prompt('編輯注意事項：', n.content);
   if (content === null) return;
   await sb.from('notes').update({ content: content.trim() }).eq('id', noteId);
   await loadNotes();
-  renderProjects();
+  renderAll();
   restoreOpenProjects([projId]);
   showToast('已更新');
 }
 
 async function deleteNote(noteId) {
   if (!confirm('確定刪除注意事項？')) return;
-  const n = notes.find(x => x.id === noteId);
+  const n = allNotes.find(x => x.id === noteId);
   const projId = n ? n.project_id : null;
   await sb.from('notes').delete().eq('id', noteId);
   await loadNotes();
-  renderProjects();
+  renderAll();
   if (projId) restoreOpenProjects([projId]);
   showToast('已刪除');
 }
@@ -2054,11 +2341,9 @@ async function deleteNote(noteId) {
 // ═══════════════════════════════════════════════
 //  WORKSPACE SWITCHER（管理者專用）
 // ═══════════════════════════════════════════════
-let allWorkspaces = [];
-
 async function loadWorkspaceSwitcher() {
-  const { data } = await sb.from('workspaces').select('name,description,created_at').order('created_at');
-  allWorkspaces = (data || []).filter(w => w.name !== 'admin');
+  const w = await fetchWorkspaces();
+  if (w) allWorkspaces = w;
   renderWsDropdown();
 }
 
@@ -2079,17 +2364,15 @@ function renderWsDropdown() {
   `).join('');
 }
 
-async function switchToWorkspace(name) {
+// 切換檢視的工作區（資料已全部載入，直接切出子集）；tab 預設回到待辦
+function switchToWorkspace(name, tab) {
+  if (!isAdmin) return;
   WS = name;
   closeWsDropdown();
-  updateWsLabel();
+  applyViews();
   renderWsDropdown();
-  // Reset tab to 待辦
-  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
-  document.querySelectorAll('.tab-nav button').forEach(b => b.classList.remove('active'));
-  document.getElementById('tab-todos').classList.add('active');
-  document.querySelector('.tab-nav button').classList.add('active');
-  await loadAll();
+  showTab(tab || 'todos');
+  renderAll();
 }
 
 function toggleWsDropdown() {
@@ -2107,38 +2390,142 @@ document.addEventListener('click', e => {
 });
 
 // ═══════════════════════════════════════════════
-//  ADMIN — 工作區總覽（唯讀；管理動作於 Supabase 後台進行）
+//  ADMIN — 全部工作區總覽
 // ═══════════════════════════════════════════════
-async function openAdminModal() {
-  if (!isAdmin) { showToast('僅管理者可使用此功能'); return; }
-  document.getElementById('admin-modal').classList.add('open');
-  await renderAdminWsList();
+let ovFilter = 'all';
+const ovOpenProj = new Set();   // 展開中的專案
+const ovClosedWs = new Set();   // 收合中的工作區
+
+function setOvFilter(btn, f) {
+  ovFilter = f;
+  document.querySelectorAll('#ov-filters .filter-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderOverview();
 }
 
-function closeAdminModal() {
-  document.getElementById('admin-modal').classList.remove('open');
+function toggleOvWs(name) {
+  if (ovClosedWs.has(name)) ovClosedWs.delete(name); else ovClosedWs.add(name);
+  renderOverview();
 }
 
-async function renderAdminWsList() {
-  const listEl = document.getElementById('admin-ws-list');
-  listEl.innerHTML = '<div style="color:var(--text-muted);font-size:13px;padding:8px 0">載入中…</div>';
-  const { data } = await sb.from('workspaces').select('name,description,created_at').order('created_at');
-  const ws = (data || []).filter(w => w.name !== 'admin');
-  allWorkspaces = ws;
-  renderWsDropdown();
-  if (!ws.length) {
-    listEl.innerHTML = '<div style="color:var(--text-muted);font-size:13px;padding:8px 0">尚無工作區</div>';
+function toggleOvProj(id) {
+  if (ovOpenProj.has(id)) ovOpenProj.delete(id); else ovOpenProj.add(id);
+  renderOverview();
+}
+
+function ovSubs(subs, level) {
+  if (!subs || !subs.length) return '';
+  return subs.map(s => `
+    <div class="ov-sub" style="margin-left:${level * 16}px">
+      <span class="ov-sub-text">${esc(s.text)}</span>
+      <div class="ov-bar sm"><div class="ov-bar-fill" style="width:${Number(s.pct) || 0}%"></div></div>
+      <span class="ov-sub-pct">${Number(s.pct) || 0}%</span>
+    </div>${level < 2 ? ovSubs(s.children, level + 1) : ''}`).join('');
+}
+
+function renderOverview() {
+  const el = document.getElementById('overview-list');
+  const sumEl = document.getElementById('overview-summary');
+  if (!el || !sumEl) return;
+
+  // 工作區清單；資料中出現、但不在清單上的工作區也列出（例如已被移除帳號的舊資料）
+  const names = allWorkspaces.map(w => w.name);
+  const known = new Set(names);
+  [...allProjects, ...allTodos].forEach(x => {
+    if (x.workspace && x.workspace !== 'admin' && !known.has(x.workspace)) { known.add(x.workspace); names.push(x.workspace); }
+  });
+  const descOf = n => (allWorkspaces.find(w => w.name === n) || {}).description || '';
+
+  const scope = allProjects.filter(p => p.workspace !== 'admin');
+  const openTodos = allTodos.filter(t => t.workspace !== 'admin' && !t.done).length;
+  sumEl.innerHTML = [
+    ['工作區', names.length],
+    ['專案總數', scope.length],
+    ['進行中', scope.filter(p => p.status === '進行中').length],
+    ['未完成待辦', openTodos],
+  ].map(([l, n]) => `<div class="ov-card"><div class="n">${n}</div><div class="l">${l}</div></div>`).join('');
+
+  if (!names.length) {
+    el.innerHTML = '<div class="empty-state"><span class="icon">🗂</span>尚無工作區，請先在 Supabase 建立工作區帳號</div>';
     return;
   }
-  listEl.innerHTML = ws.map(w => `
-    <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px 14px;display:flex;align-items:center;gap:12px">
-      <div style="flex:1">
-        <div style="font-size:13px;font-weight:600;color:var(--text)">${esc(w.name)}</div>
-        ${w.description ? `<div style="font-size:12px;color:var(--text-muted);margin-top:2px">${esc(w.description)}</div>` : ''}
+
+  el.innerHTML = names.map(name => {
+    const wp = allProjects.filter(p => p.workspace === name).sort(bySort);
+    const wt = allTodos.filter(t => t.workspace === name).sort(bySort);
+    const shown = wp.filter(p => ovFilter === 'all' || p.status === ovFilter);
+    const progs = wp.map(projProgress).filter(v => v !== null);
+    const avg = progs.length ? Math.round(progs.reduce((a, b) => a + b, 0) / progs.length) : null;
+    const todoOpen = wt.filter(t => !t.done).length;
+    const closed = ovClosedWs.has(name);
+    const q = JSON.stringify(name).replace(/"/g, '&quot;');
+
+    const projHtml = shown.map(p => {
+      const prog = projProgress(p);
+      const open = ovOpenProj.has(p.id);
+      const pn = allNotes.filter(n => n.project_id === p.id).slice(-5).reverse();
+      const fin = [
+        p.invoice_date ? `發票 ${p.invoice_date}` : '',
+        p.payment_estimated ? `預估收款 ${p.payment_estimated}` : '',
+        p.payment_actual ? `實際收款 ${p.payment_actual}` : '',
+      ].filter(Boolean).join('　·　');
+      return `
+      <div class="ov-proj">
+        <div class="ov-proj-row" onclick="toggleOvProj('${p.id}')">
+          <span class="ov-arrow">${open ? '▼' : '▶'}</span>
+          <span class="ov-proj-name">${esc(p.name)}</span>
+          <span class="status-badge status-${p.status}">${p.status}</span>
+          ${p.member ? `<span class="tag tag-member" style="font-size:11px">${esc(p.member)}</span>` : ''}
+          ${p.deadline ? `<span class="text-muted">截止 ${p.deadline}</span>` : ''}
+          <span class="ov-spacer"></span>
+          <div class="ov-bar"><div class="ov-bar-fill" style="width:${prog || 0}%"></div></div>
+          <span class="ov-pct">${prog === null ? '—' : prog + '%'}</span>
+          <div class="ov-row-actions" onclick="event.stopPropagation()">
+            <button class="btn btn-sm" onclick="openProjectModal('${p.id}')">編輯</button>
+            <button class="btn btn-sm" style="color:#c0392b" onclick="deleteProject('${p.id}')">刪除</button>
+          </div>
+        </div>
+        ${open ? `<div class="ov-proj-detail">
+          ${fin ? `<div class="ov-fin">${esc(fin)}</div>` : ''}
+          <div class="ov-sec-title">子任務進度</div>
+          ${(p.subs && p.subs.length) ? ovSubs(p.subs, 0) : '<div class="text-muted">尚無子任務</div>'}
+          <div class="ov-sec-title">最新注意事項</div>
+          ${pn.length ? pn.map(n => `<div class="ov-note">${esc(n.content)}<span class="text-muted">　— ${esc(n.created_by || '—')} · ${fmtDate(n.created_at)}</span></div>`).join('') : '<div class="text-muted">尚無注意事項</div>'}
+        </div>` : ''}
+      </div>`;
+    }).join('');
+
+    const todoHtml = wt.length ? wt.map(t => `
+      <div class="ov-todo ${t.done ? 'done' : ''}">
+        <span class="ov-todo-mark">${t.done ? '✓' : '○'}</span>
+        <span class="ov-todo-text">${esc(t.text)}</span>
+        ${t.member ? `<span class="tag tag-member" style="font-size:11px">${esc(t.member)}</span>` : ''}
+        ${t.date ? `<span class="text-muted">📅 ${t.date}</span>` : ''}
+        <button class="btn btn-sm btn-icon" onclick="openTodoModal('${t.id}')">✎</button>
+      </div>`).join('') : '<div class="text-muted">尚無待辦</div>';
+
+    return `
+    <div class="ov-ws">
+      <div class="ov-ws-head" onclick="toggleOvWs(${q})">
+        <span class="ov-arrow">${closed ? '▶' : '▼'}</span>
+        <span class="ov-ws-name">${esc(name)}</span>
+        ${descOf(name) ? `<span class="text-muted">${esc(descOf(name))}</span>` : ''}
+        <span class="ov-chips">專案 ${wp.length}　·　平均進度 ${avg === null ? '—' : avg + '%'}　·　待辦未完成 ${todoOpen}/${wt.length}</span>
+        <span class="ov-spacer"></span>
+        <div class="ov-row-actions" onclick="event.stopPropagation()">
+          <button class="btn btn-sm" onclick="openProjectModal(null, ${q})">＋ 專案</button>
+          <button class="btn btn-sm" onclick="openTodoModal(null, ${q})">＋ 指派待辦</button>
+          <button class="btn btn-sm btn-dark" onclick="switchToWorkspace(${q}, 'projects')">進入</button>
+        </div>
       </div>
-      <button class="btn btn-sm" onclick="switchToWorkspace('${esc(w.name)}');closeAdminModal()" style="white-space:nowrap">進入</button>
-    </div>
-  `).join('');
+      ${closed ? '' : `<div class="ov-ws-body">
+        <div class="ov-sec-title">專案${ovFilter === 'all' ? '' : `（${ovFilter}）`}</div>
+        ${shown.length ? projHtml : `<div class="text-muted">${wp.length ? '沒有符合狀態的專案' : '尚無專案'}</div>`}
+        <div class="ov-sec-title" style="margin-top:14px">待辦（${todoOpen} 項未完成）</div>
+        ${todoHtml}
+      </div>`}
+    </div>`;
+  }).join('');
 }
 
 // ═══════════════════════════════════════════════
