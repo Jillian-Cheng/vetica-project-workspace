@@ -993,6 +993,45 @@
     .ov-bar { width: 70px; }
     .sync-label { display: none; }
   }
+
+  /* ─── v4：專案行事曆（連續跨日色條）─── */
+  .cal-grid { display: block; }
+  .cal-head { display: grid; grid-template-columns: repeat(7, 1fr); }
+  .cal-board { border-top: 1px solid var(--border-light); border-left: 1px solid var(--border-light); }
+  .cal-week { position: relative; display: grid; grid-template-columns: repeat(7, 1fr); }
+  .cal-week .cal-cell {
+    border: none; border-right: 1px solid var(--border-light); border-bottom: 1px solid var(--border-light);
+    border-radius: 0; min-height: 76px;
+  }
+  .cal-cell.other-month { background: #fafaf9; }
+  .cal-cell.other-month .cal-date { color: var(--text-muted); font-weight: 400; }
+  .cal-bar {
+    position: absolute; height: 19px; line-height: 19px; font-size: 11px; font-weight: 500;
+    padding: 0 7px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    cursor: pointer; box-sizing: border-box; transition: filter 0.12s;
+  }
+  .cal-bar:hover { filter: brightness(0.94); }
+  .cal-bar.cancelled { opacity: 0.45; text-decoration: line-through; }
+  .cal-legend { gap: 8px 18px; }
+  .cal-legend-click { cursor: pointer; }
+  .cal-legend-click:hover { color: var(--text); }
+  .cal-legend-note { width: 100%; font-size: 12px; color: var(--text-muted); margin-top: 4px; }
+  .cal-pop-dot { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-right: 8px; vertical-align: middle; }
+  .cal-pop-row { font-size: 13px; color: var(--text); padding: 5px 0; display: flex; align-items: center; gap: 8px; }
+  .cal-pop-k { width: 72px; font-size: 12px; color: var(--text-muted); flex-shrink: 0; }
+
+  /* ─── v4：收付款條列 ─── */
+  .fin-month { font-size: 13px; font-weight: 600; color: var(--text); margin: 18px 0 6px; padding-bottom: 6px; border-bottom: 1px solid var(--border); }
+  .fin-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 10px 4px; border-bottom: 1px solid var(--border-light); font-size: 13px; }
+  .fin-row.past { color: var(--text-muted); }
+  .fin-row.today { background: #fffbeb; }
+  .fin-date { font-family: var(--font-mono); font-size: 13px; width: 150px; flex-shrink: 0; }
+  .fin-tag { font-size: 11px; font-weight: 600; padding: 2px 9px; border-radius: 10px; width: 70px; text-align: center; flex-shrink: 0; }
+  .fin-invoice { background: #fef3c7; color: #b45309; }
+  .fin-est { background: #ede9fe; color: #6d28d9; }
+  .fin-actual { background: #d1fae5; color: #047857; }
+  .fin-proj { font-weight: 500; }
+  @media (max-width: 700px) { .fin-date { width: 120px; } }
 </style>
 </head>
 <body>
@@ -1055,6 +1094,7 @@
     <button class="active" data-tab="todos" onclick="showTab('todos')">待辦事項</button>
     <button data-tab="calendar" onclick="showTab('calendar')">行事曆</button>
     <button data-tab="projects" onclick="showTab('projects')">專案規劃</button>
+    <button class="finance-only" data-tab="finance" onclick="showTab('finance')">收付款</button>
   </nav>
 
   <main class="content">
@@ -1114,12 +1154,7 @@
           <button class="btn" onclick="calNext()">下月 ›</button>
         </div>
         <div class="cal-grid" id="cal-grid"></div>
-        <div class="cal-legend">
-          <div class="cal-legend-item"><div class="cal-legend-swatch" style="background:#dbeafe"></div>待辦日期</div>
-          <div class="cal-legend-item finance-only"><div class="cal-legend-swatch" style="background:#fef3c7"></div>發票日期</div>
-          <div class="cal-legend-item finance-only"><div class="cal-legend-swatch" style="background:#ede9fe"></div>預估收款</div>
-          <div class="cal-legend-item finance-only"><div class="cal-legend-swatch" style="background:#d1fae5"></div>實際收款</div>
-        </div>
+        <div class="cal-legend" id="cal-legend"></div>
       </div>
     </div>
 
@@ -1130,6 +1165,22 @@
         <button class="btn btn-dark admin-only" onclick="openProjectModal()">＋ 新增專案</button>
       </div>
       <div id="project-list"></div>
+    </div>
+
+    <!-- ── TAB: 收付款（僅 admin）── -->
+    <div id="tab-finance" class="tab-panel finance-only">
+      <div class="section-header">
+        <h1 class="section-title">收付款日期</h1>
+      </div>
+      <div class="ov-summary" id="finance-summary" style="grid-template-columns:repeat(3,1fr)"></div>
+      <div class="filter-bar" id="fin-filters">
+        <button class="filter-btn active" data-f="all" onclick="setFinFilter(this,'all')">全部</button>
+        <button class="filter-btn" data-f="invoice" onclick="setFinFilter(this,'invoice')">發票</button>
+        <button class="filter-btn" data-f="est" onclick="setFinFilter(this,'est')">預估收款</button>
+        <button class="filter-btn" data-f="actual" onclick="setFinFilter(this,'actual')">實際收款</button>
+        <button class="filter-btn" onclick="toggleFinFuture(this)">僅顯示今日之後</button>
+      </div>
+      <div id="finance-list"></div>
     </div>
 
   </main>
@@ -1203,6 +1254,10 @@
       </select>
     </div>
     <div class="form-group">
+      <label>開始日期（與截止日期構成行事曆上的執行期間）</label>
+      <input id="proj-start" type="date" />
+    </div>
+    <div class="form-group">
       <label>截止日期</label>
       <input id="proj-deadline" type="date" />
     </div>
@@ -1248,6 +1303,18 @@
     <div class="modal-actions">
       <button class="btn" onclick="closeSubModal()">取消</button>
       <button class="btn btn-dark" onclick="saveSub()">儲存</button>
+    </div>
+  </div>
+</div>
+
+<!-- ──────────────── CALENDAR PROJECT POPUP ──────────────── -->
+<div class="modal-overlay" id="cal-pop">
+  <div class="modal" style="max-width:420px">
+    <h3 id="cal-pop-title"></h3>
+    <div id="cal-pop-body"></div>
+    <div class="modal-actions" style="margin-top:1.2rem">
+      <button class="btn admin-only" id="cal-pop-go">進入專案</button>
+      <button class="btn btn-dark" onclick="closeCalPop()">關閉</button>
     </div>
   </div>
 </div>
@@ -1498,6 +1565,7 @@ function renderAll() {
   renderCalendar();
   renderProjects();
   if (isAdmin) renderOverview();
+  if (isFinance) renderFinance();
   updateSyncLabel();
 }
 
@@ -1560,6 +1628,7 @@ function showTab(name) {
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.id === 'tab-' + name));
   document.querySelectorAll('.tab-nav button').forEach(b => b.classList.toggle('active', b.dataset.tab === name));
   if (name === 'calendar') renderCalendar();
+  if (name === 'finance') renderFinance();
   updateWsLabel();
 }
 
@@ -1773,60 +1842,191 @@ async function dropTodo(e) {
 function calPrev() { calMonth--; if (calMonth < 0) { calMonth = 11; calYear--; } renderCalendar(); }
 function calNext() { calMonth++; if (calMonth > 11) { calMonth = 0; calYear++; } renderCalendar(); }
 
+// 專案配色（依專案建立順序固定分配，新增專案不會改變既有專案的顏色）
+const CAL_COLORS = [
+  ['#dbeafe', '#1e40af'], ['#fde68a', '#92400e'], ['#d1fae5', '#065f46'], ['#fecaca', '#991b1b'], ['#e9d5ff', '#6b21a8'],
+  ['#fbcfe8', '#9d174d'], ['#bae6fd', '#075985'], ['#fed7aa', '#9a3412'], ['#c7d2fe', '#3730a3'], ['#d9f99d', '#3f6212'],
+];
+
+function calProjects() {
+  return allProjects.filter(p => p.workspace !== 'admin').slice().sort((a, b) =>
+    String(a.created_at || '').localeCompare(String(b.created_at || '')) || String(a.id).localeCompare(String(b.id)));
+}
+
+function projColor(p, list) {
+  const i = list.findIndex(x => x.id === p.id);
+  return CAL_COLORS[(i < 0 ? 0 : i) % CAL_COLORS.length];
+}
+
+// 專案執行期間：開始日～截止日；只填其一則為單日
+function projSpan(p) {
+  let st = p.start_date || p.deadline, en = p.deadline || p.start_date;
+  if (!st || !en) return null;
+  if (st > en) [st, en] = [en, st];
+  return [st, en];
+}
+
+function periodText(p) {
+  if (p.start_date && p.deadline) return `期間 ${p.start_date} ~ ${p.deadline}`;
+  if (p.deadline) return `截止 ${p.deadline}`;
+  if (p.start_date) return `開始 ${p.start_date}`;
+  return '';
+}
+
+function ymd(d) { return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`; }
+
 function renderCalendar() {
   const monthNames = ['一月','二月','三月','四月','五月','六月','七月','八月','九月','十月','十一月','十二月'];
   document.getElementById('cal-title').textContent = `${calYear} · ${monthNames[calMonth]}`;
 
-  const grid = document.getElementById('cal-grid');
-  const days = ['日','一','二','三','四','五','六'];
-  let html = days.map(d => `<div class="cal-day-header">${d}</div>`).join('');
+  const list = calProjects();
+  const dayNames = ['日','一','二','三','四','五','六'];
+  let html = `<div class="cal-head">${dayNames.map(d => `<div class="cal-day-header">${d}</div>`).join('')}</div><div class="cal-board">`;
 
   const firstDay = new Date(calYear, calMonth, 1).getDay();
   const lastDate = new Date(calYear, calMonth + 1, 0).getDate();
-  const today = new Date();
-  const todayStr = `${today.getFullYear()}-${pad2(today.getMonth()+1)}-${pad2(today.getDate())}`;
+  const weeks = Math.ceil((firstDay + lastDate) / 7);
+  const todayStr = ymd(new Date());
+  const spans = list.map(p => ({ p, span: projSpan(p) })).filter(x => x.span);
 
-  // Build events map
-  const evMap = {};
-  const addEv = (dateStr, type, label) => {
-    if (!dateStr) return;
-    if (!evMap[dateStr]) evMap[dateStr] = [];
-    evMap[dateStr].push({ type, label });
-  };
+  for (let w = 0; w < weeks; w++) {
+    const days = [];
+    for (let c = 0; c < 7; c++) days.push(new Date(calYear, calMonth, 1 - firstDay + w * 7 + c));
+    const ds = days.map(ymd);
 
-  todos.forEach(t => { if (t.date) addEv(t.date, 'todo', t.text); });
-  if (isFinance) {
-    projects.forEach(p => {
-      if (p.invoice_date) addEv(p.invoice_date, 'invoice', p.name + ' 發票');
-      if (p.payment_estimated) addEv(p.payment_estimated, 'pay-est', p.name + ' 預估收款');
-      if (p.payment_actual) addEv(p.payment_actual, 'pay-actual', p.name + ' 實際收款');
+    // 這一週內有出現的專案，切成「本週片段」
+    const segs = spans.filter(x => x.span[0] <= ds[6] && x.span[1] >= ds[0]).map(x => {
+      const c0 = x.span[0] < ds[0] ? 0 : ds.indexOf(x.span[0]);
+      const c1 = x.span[1] > ds[6] ? 6 : ds.indexOf(x.span[1]);
+      return { p: x.p, c0, c1, left: x.span[0] < ds[0], right: x.span[1] > ds[6], s: x.span[0], e: x.span[1] };
+    }).sort((a, b) => (a.s < b.s ? -1 : a.s > b.s ? 1 : (a.e < b.e ? 1 : a.e > b.e ? -1 : String(a.p.name).localeCompare(String(b.p.name)))));
+
+    // 重疊的專案上下堆疊（每條在第一個空的「列」放置）
+    const lanes = [];
+    segs.forEach(sg => {
+      let k = lanes.findIndex(end => sg.c0 > end);
+      if (k < 0) { k = lanes.length; lanes.push(-1); }
+      lanes[k] = sg.c1; sg.lane = k;
     });
-  }
+    const minH = Math.max(76, 32 + lanes.length * 22 + 6);
 
-  const typeClass = { todo: 'cal-dot-todo', invoice: 'cal-dot-invoice', 'pay-est': 'cal-dot-payment-est', 'pay-actual': 'cal-dot-payment-actual' };
-
-  let d = 1;
-  for (let row = 0; row < 6; row++) {
-    for (let col = 0; col < 7; col++) {
-      const cellIdx = row * 7 + col;
-      if (cellIdx < firstDay || d > lastDate) {
-        html += '<div class="cal-cell other-month"></div>';
-      } else {
-        const dateStr = `${calYear}-${pad2(calMonth+1)}-${pad2(d)}`;
-        const isToday = dateStr === todayStr;
-        const evs = evMap[dateStr] || [];
-        html += `<div class="cal-cell ${isToday ? 'today' : ''}">
-          <div class="cal-date">${d}</div>
-          ${evs.slice(0, 3).map(e => `<span class="cal-dot ${typeClass[e.type]}" title="${esc(e.label)}">${esc(e.label.slice(0,12))}</span>`).join('')}
-          ${evs.length > 3 ? `<span class="cal-dot" style="color:#aaa">+${evs.length-3}</span>` : ''}
-        </div>`;
-        d++;
-      }
+    html += `<div class="cal-week">`;
+    for (let c = 0; c < 7; c++) {
+      const other = days[c].getMonth() !== calMonth;
+      html += `<div class="cal-cell ${other ? 'other-month' : ''} ${ds[c] === todayStr ? 'today' : ''}" style="min-height:${minH}px">
+        <div class="cal-date">${days[c].getDate()}</div></div>`;
     }
-    if (d > lastDate) break;
+    segs.forEach(sg => {
+      const [bg, fg] = projColor(sg.p, list);
+      const span = sg.c1 - sg.c0 + 1;
+      const rl = sg.left ? 0 : 4, rr = sg.right ? 0 : 4;
+      html += `<div class="cal-bar ${sg.p.status === '取消' ? 'cancelled' : ''}" onclick="showCalPop('${sg.p.id}')"
+        title="${esc(sg.p.name)}　${esc(periodText(sg.p))}"
+        style="left:calc(${sg.c0} * 100% / 7 + 2px);width:calc(${span} * 100% / 7 - 4px);top:${30 + sg.lane * 22}px;background:${bg};color:${fg};border-radius:${rl}px ${rr}px ${rr}px ${rl}px">${esc(sg.p.name)}</div>`;
+    });
+    html += `</div>`;
   }
+  html += `</div>`;
+  document.getElementById('cal-grid').innerHTML = html;
 
-  grid.innerHTML = html;
+  // 專案圖例
+  const dated = list.filter(p => projSpan(p));
+  const undated = list.filter(p => !projSpan(p));
+  const item = p => {
+    const [bg, fg] = projColor(p, list);
+    return `<div class="cal-legend-item cal-legend-click" onclick="showCalPop('${p.id}')">
+      <div class="cal-legend-swatch" style="background:${bg};border:1px solid ${fg}"></div>
+      <span>${esc(p.name)}${isAdmin ? `<span class="text-muted">　${esc(p.workspace)}</span>` : ''}</span></div>`;
+  };
+  document.getElementById('cal-legend').innerHTML =
+    (dated.length ? dated.map(item).join('') : '<div class="text-muted">尚無已設定日期的專案</div>') +
+    (undated.length ? `<div class="cal-legend-note">未設定日期（不顯示於行事曆）：${undated.map(p => esc(p.name)).join('、')}</div>` : '');
+}
+
+function showCalPop(id) {
+  const p = allProjects.find(x => x.id === id);
+  if (!p) return;
+  const list = calProjects();
+  const [bg, fg] = projColor(p, list);
+  const prog = projProgress(p);
+  document.getElementById('cal-pop-title').innerHTML = `<span class="cal-pop-dot" style="background:${bg};border:1px solid ${fg}"></span>${esc(p.name)}`;
+  document.getElementById('cal-pop-body').innerHTML = `
+    <div class="cal-pop-row"><span class="status-badge status-${p.status}">${p.status}</span></div>
+    ${isAdmin ? `<div class="cal-pop-row"><span class="cal-pop-k">所屬工作區</span>${esc(p.workspace)}</div>` : ''}
+    <div class="cal-pop-row"><span class="cal-pop-k">執行期間</span>${esc(periodText(p).replace(/^(期間|截止|開始) /, '')) || '未設定'}${(p.start_date && p.deadline) ? '' : (p.deadline ? '（截止日）' : '')}</div>
+    ${p.member ? `<div class="cal-pop-row"><span class="cal-pop-k">負責人</span>${esc(p.member)}</div>` : ''}
+    <div class="cal-pop-row"><span class="cal-pop-k">整體進度</span>${prog === null ? '尚無子任務' : `<span class="ov-bar" style="display:inline-block;vertical-align:middle"><span class="ov-bar-fill" style="display:block;width:${prog}%"></span></span> ${prog}%`}</div>`;
+  const go = document.getElementById('cal-pop-go');
+  go.onclick = () => { closeCalPop(); switchToWorkspace(p.workspace, 'projects'); };
+  document.getElementById('cal-pop').classList.add('open');
+}
+
+function closeCalPop() { document.getElementById('cal-pop').classList.remove('open'); }
+
+// ═══════════════════════════════════════════════
+//  FINANCE — 收付款日期條列（僅 admin）
+// ═══════════════════════════════════════════════
+let finFilter = 'all', finFuture = false;
+
+function setFinFilter(btn, f) {
+  finFilter = f;
+  document.querySelectorAll('#fin-filters .filter-btn[data-f]').forEach(b => b.classList.toggle('active', b === btn));
+  renderFinance();
+}
+
+function toggleFinFuture(btn) {
+  finFuture = !finFuture;
+  btn.classList.toggle('active', finFuture);
+  renderFinance();
+}
+
+function renderFinance() {
+  const el = document.getElementById('finance-list');
+  const sumEl = document.getElementById('finance-summary');
+  if (!el || !sumEl) return;
+  if (!isFinance) { el.innerHTML = ''; return; }
+  if (!financeOk) {
+    sumEl.innerHTML = '';
+    el.innerHTML = '<div class="empty-state"><span class="icon">⚠</span>目前讀不到收付款資料表（尚未執行資料庫設定，或網路異常）</div>';
+    return;
+  }
+  const label = { invoice: '發票', est: '預估收款', actual: '實際收款' };
+  const order = { invoice: 0, est: 1, actual: 2 };
+  const all = [];
+  allProjects.forEach(p => {
+    if (p.workspace === 'admin') return;
+    [['invoice', p.invoice_date], ['est', p.payment_estimated], ['actual', p.payment_actual]]
+      .forEach(([t, d]) => { if (d) all.push({ t, d, p }); });
+  });
+  sumEl.innerHTML = ['invoice', 'est', 'actual'].map(t =>
+    `<div class="ov-card"><div class="n">${all.filter(r => r.t === t).length}</div><div class="l">${label[t]}（筆）</div></div>`).join('');
+
+  const today = ymd(new Date());
+  const rows = all.filter(r => (finFilter === 'all' || r.t === finFilter) && (!finFuture || r.d >= today))
+    .sort((a, b) => a.d.localeCompare(b.d) || order[a.t] - order[b.t] || String(a.p.name).localeCompare(String(b.p.name)));
+  if (!rows.length) {
+    el.innerHTML = '<div class="empty-state"><span class="icon">🧾</span>沒有符合條件的收付款日期</div>';
+    return;
+  }
+  const wk = ['日', '一', '二', '三', '四', '五', '六'];
+  let html = '', cur = '';
+  rows.forEach(r => {
+    const ym = r.d.slice(0, 7);
+    if (ym !== cur) {
+      cur = ym;
+      html += `<div class="fin-month">${ym.slice(0, 4)} 年 ${parseInt(ym.slice(5, 7), 10)} 月<span class="text-muted">　${rows.filter(x => x.d.slice(0, 7) === ym).length} 筆</span></div>`;
+    }
+    const dt = new Date(+r.d.slice(0, 4), +r.d.slice(5, 7) - 1, +r.d.slice(8, 10));
+    html += `<div class="fin-row ${r.d < today ? 'past' : ''} ${r.d === today ? 'today' : ''}">
+      <span class="fin-date">${r.d}<span class="text-muted">（${wk[dt.getDay()]}）</span></span>
+      <span class="fin-tag fin-${r.t}">${label[r.t]}</span>
+      <span class="fin-proj">${esc(r.p.name)}</span>
+      <span class="tag tag-member" style="font-size:11px">${esc(r.p.workspace)}</span>
+      <span class="ov-spacer"></span>
+      <button class="btn btn-sm" onclick="openProjectModal('${r.p.id}')">編輯</button>
+    </div>`;
+  });
+  el.innerHTML = html;
 }
 
 // ═══════════════════════════════════════════════
@@ -1844,6 +2044,7 @@ function openProjectModal(id, ws) {
   document.getElementById('proj-name').value = p ? p.name : '';
   document.getElementById('proj-member').value = p ? (p.member || '') : '';
   document.getElementById('proj-status').value = p ? (p.status || '提案中') : '提案中';
+  document.getElementById('proj-start').value = p ? (p.start_date || '') : '';
   document.getElementById('proj-deadline').value = p ? (p.deadline || '') : '';
   document.getElementById('proj-invoice').value = p ? (p.invoice_date || '') : '';
   document.getElementById('proj-pay-est').value = p ? (p.payment_estimated || '') : '';
@@ -1867,6 +2068,7 @@ async function saveProject() {
     name,
     member: document.getElementById('proj-member').value.trim() || null,
     status: document.getElementById('proj-status').value,
+    start_date: document.getElementById('proj-start').value || null,
     deadline: document.getElementById('proj-deadline').value || null,
   };
   const finance = {
@@ -1876,25 +2078,31 @@ async function saveProject() {
   };
   const hasFinance = Object.values(finance).some(Boolean);
 
-  let projId = id, msg;
+  let projId = id, msg, warn = '';
   if (id) {
-    const r = await sb.from('projects').update(payload).eq('id', id).select('id');
+    let r = await sb.from('projects').update(payload).eq('id', id).select('id');
+    if (r.error) {
+      // 資料表尚無 start_date 欄位時，退回不含開始日期的寫入
+      const { start_date, ...rest } = payload;
+      r = await sb.from('projects').update(rest).eq('id', id).select('id');
+      if (!r.error && start_date) warn = '開始日期未儲存：請先在 Supabase 執行 step3 SQL';
+    }
     if (r.error || !r.data || !r.data.length) { showToast('儲存失敗，請稍後再試'); return; }
     msg = '專案已更新';
   } else {
     projId = 'pr-' + Date.now();
     const inWs = allProjects.filter(p => p.workspace === targetWs);
     const maxOrder = inWs.length ? Math.max(...inWs.map(p => p.sort_order || 0)) : -1;
-    let { error } = await sb.from('projects').insert({
-      id: projId, workspace: targetWs, created_by: USER,
-      subs: [], sort_order: maxOrder + 1, ...payload
-    });
-    if (error) {
-      // 資料表尚無 sort_order 欄位時，退回不含排序欄位的寫入
-      ({ error } = await sb.from('projects').insert({
-        id: projId, workspace: targetWs, created_by: USER, subs: [], ...payload
-      }));
+    const base = { id: projId, workspace: targetWs, created_by: USER, subs: [], ...payload };
+    // 依序嘗試：完整 → 不含開始日期 → 不含排序 → 兩者皆不含（對應尚未新增欄位的舊資料表）
+    const { start_date, ...noStart } = base;
+    const variants = [{ ...base, sort_order: maxOrder + 1 }, { ...noStart, sort_order: maxOrder + 1 }, base, noStart];
+    let error = null, used = -1;
+    for (let i = 0; i < variants.length; i++) {
+      ({ error } = await sb.from('projects').insert(variants[i]));
+      if (!error) { used = i; break; }
     }
+    if (!error && (used === 1 || used === 3) && start_date) warn = '開始日期未儲存：請先在 Supabase 執行 step3 SQL';
     if (error) { showToast('新增失敗，請稍後再試'); return; }
     msg = targetWs === WS ? '專案已新增' : `專案已新增到 ${targetWs}`;
   }
@@ -1915,7 +2123,7 @@ async function saveProject() {
   closeProjectModal();
   await Promise.all([loadProjects(), loadNotes()]);
   renderAll();
-  showToast(msg);
+  showToast(warn ? `${msg}；${warn}` : msg);
 }
 
 async function deleteProject(id) {
@@ -1977,7 +2185,7 @@ function renderProjects() {
         <div class="project-meta">
           <span class="status-badge status-${p.status}">${p.status}</span>
           ${prog !== null ? `<span class="proj-pct">進度 ${prog}%</span>` : ''}
-          ${p.deadline ? `<span class="text-muted">截止 ${p.deadline}</span>` : ''}
+          ${periodText(p) ? `<span class="text-muted">${periodText(p)}</span>` : ''}
           ${p.member ? `<span class="tag tag-member" style="font-size:11px">${esc(p.member)}</span>` : ''}
         </div>
         ${isAdmin ? `<div style="display:flex;gap:6px;margin-left:8px" onclick="event.stopPropagation()">
@@ -1990,6 +2198,7 @@ function renderProjects() {
         <!-- Details -->
         <div class="project-details">
           ${detailItem('負責人', p.member)}
+          ${detailItem('開始日期', p.start_date)}
           ${detailItem('截止日期', p.deadline)}
           ${isFinance ? detailItem('發票日期', p.invoice_date) : ''}
           ${isFinance ? detailItem('預估收款', p.payment_estimated) : ''}
@@ -2476,7 +2685,7 @@ function renderOverview() {
           <span class="ov-proj-name">${esc(p.name)}</span>
           <span class="status-badge status-${p.status}">${p.status}</span>
           ${p.member ? `<span class="tag tag-member" style="font-size:11px">${esc(p.member)}</span>` : ''}
-          ${p.deadline ? `<span class="text-muted">截止 ${p.deadline}</span>` : ''}
+          ${periodText(p) ? `<span class="text-muted">${periodText(p)}</span>` : ''}
           <span class="ov-spacer"></span>
           <div class="ov-bar"><div class="ov-bar-fill" style="width:${prog || 0}%"></div></div>
           <span class="ov-pct">${prog === null ? '—' : prog + '%'}</span>
