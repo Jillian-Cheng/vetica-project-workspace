@@ -562,6 +562,9 @@
     overflow: hidden;
   }
 
+  .project-card.dragging { opacity: 0.4; }
+  .project-card.drag-over { border-top: 3px solid #555; }
+
   .project-header {
     padding: 14px 18px;
     display: flex;
@@ -572,6 +575,18 @@
   }
 
   .project-header:hover { background: #fafafa; }
+
+  .project-drag-handle {
+    cursor: grab;
+    color: #bbb;
+    font-size: 16px;
+    line-height: 1;
+    padding: 4px 2px;
+    letter-spacing: -2px;
+  }
+
+  .project-drag-handle:hover { color: #555; }
+  .project-drag-handle:active { cursor: grabbing; }
 
   .project-expand-btn {
     background: none;
@@ -980,7 +995,7 @@
           <div class="ws-dropdown-header">工作區列表</div>
           <div id="ws-dropdown-list"></div>
           <hr class="ws-dropdown-divider">
-          <div class="ws-dropdown-action" onclick="openAdminModal();closeWsDropdown()">⚙ 管理工作區</div>
+          <div class="ws-dropdown-action" onclick="openAdminGate();closeWsDropdown()">⚙ 管理工作區</div>
         </div>
       </div>
       <button class="btn-logout" onclick="doLogout()">離開</button>
@@ -1158,7 +1173,7 @@
 <div class="modal-overlay" id="admin-gate-modal">
   <div class="modal" style="max-width:360px">
     <h3>管理者驗證</h3>
-    <p style="font-size:13px;color:var(--text-muted);margin-bottom:1.2rem">請輸入管理者密碼以進入工作區管理</p>
+    <p style="font-size:13px;color:var(--text-muted);margin-bottom:1.2rem">請輸入管理者（admin）密碼以進入工作區管理</p>
     <div class="form-group">
       <label>管理者密碼</label>
       <input id="admin-gate-pw" type="password" placeholder="請輸入管理者密碼" autocomplete="off" />
@@ -1187,7 +1202,7 @@
         </div>
         <div class="form-group" style="margin:0">
           <label>密碼 *</label>
-          <input id="new-ws-password" type="text" placeholder="設定密碼" autocomplete="off" />
+          <input id="new-ws-password" type="password" placeholder="設定密碼" autocomplete="new-password" />
         </div>
       </div>
       <div class="form-group" style="margin-bottom:10px">
@@ -1212,11 +1227,10 @@
 
 <script>
 // ═══════════════════════════════════════════════
-//  CONFIGURATION — 請填入您的 Supabase 資訊
+//  CONFIGURATION — Supabase 資訊
 // ═══════════════════════════════════════════════
 const SUPABASE_URL = 'https://ihewmltnvgcydoalpzyj.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImloZXdtbHRudmdjeWRvYWxwenlqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE3NDAzMzUsImV4cCI6MjA5NzMxNjMzNX0.LXwAA3mjLMBt4R7ROvaTXRBRHl_H3TeY7eFywKZQCts';
-const ADMIN_PASSWORD = 'vetica-admin-2026'; // 管理者密碼，可自行修改
 
 // ═══════════════════════════════════════════════
 //  INIT
@@ -1286,6 +1300,9 @@ function bootApp() {
   document.getElementById('app').style.display = 'block';
   document.getElementById('user-label').textContent = USER;
 
+  const now = new Date();
+  calYear = now.getFullYear(); calMonth = now.getMonth();
+
   if (isAdmin) {
     // 管理者：顯示切換器，預設進入第一個非 admin 工作區
     document.getElementById('ws-switcher').classList.add('visible');
@@ -1307,9 +1324,6 @@ function bootApp() {
     updateWsLabel();
     loadAllAndRender();
   }
-
-  const now = new Date();
-  calYear = now.getFullYear(); calMonth = now.getMonth();
 }
 
 function updateWsLabel() {
@@ -1337,7 +1351,14 @@ async function loadTodos() {
 }
 
 async function loadProjects() {
-  const { data } = await sb.from('projects').select('*').eq('workspace', WS).order('created_at');
+  // 優先以 sort_order 排序；若資料表尚未新增 sort_order 欄位，退回以建立時間排序
+  let { data, error } = await sb.from('projects').select('*').eq('workspace', WS)
+    .order('sort_order', { ascending: true, nullsFirst: false })
+    .order('created_at', { ascending: true });
+  if (error) {
+    const res = await sb.from('projects').select('*').eq('workspace', WS).order('created_at');
+    data = res.data;
+  }
   projects = data || [];
 }
 
@@ -1628,10 +1649,18 @@ async function saveProject() {
     showToast('專案已更新');
   } else {
     const newId = 'pr-' + Date.now();
-    await sb.from('projects').insert({
+    const maxOrder = projects.length ? Math.max(...projects.map(p => p.sort_order || 0)) : -1;
+    let { error } = await sb.from('projects').insert({
       id: newId, workspace: WS, created_by: USER,
-      subs: [], ...payload
+      subs: [], sort_order: maxOrder + 1, ...payload
     });
+    if (error) {
+      // 資料表尚無 sort_order 欄位時，退回不含排序欄位的寫入
+      await sb.from('projects').insert({
+        id: newId, workspace: WS, created_by: USER,
+        subs: [], ...payload
+      });
+    }
     showToast('專案已新增');
   }
 
@@ -1652,7 +1681,20 @@ async function deleteProject(id) {
   showToast('已刪除');
 }
 
+function getOpenProjectIds() {
+  return Array.from(document.querySelectorAll('.project-body.open')).map(el => el.id.replace('pb-', ''));
+}
+
+function restoreOpenProjects(ids) {
+  ids.forEach(id => {
+    const body = document.getElementById('pb-' + id);
+    const btn = document.getElementById('exp-' + id);
+    if (body) { body.classList.add('open'); if (btn) btn.textContent = '▼'; }
+  });
+}
+
 function renderProjects() {
+  const openIds = getOpenProjectIds();
   const list = document.getElementById('project-list');
   if (!projects.length) {
     list.innerHTML = '<div class="empty-state"><span class="icon">📁</span>尚無專案，點擊「+ 新增專案」開始</div>';
@@ -1664,8 +1706,17 @@ function renderProjects() {
     const projNotes = notes.filter(n => n.project_id === p.id);
 
     return `
-    <div class="project-card" id="pc-${p.id}">
+    <div class="project-card" id="pc-${p.id}" data-id="${p.id}"
+      ondragstart="projDragStart(event)"
+      ondragover="projDragOver(event)"
+      ondragleave="projDragLeave(event)"
+      ondrop="projDrop(event)"
+      ondragend="projDragEnd(event)">
       <div class="project-header" onclick="toggleProject('${p.id}')">
+        <span class="project-drag-handle" title="拖曳調整順序"
+          onmousedown="projHandleDown(event)" onmouseup="projHandleUp(event)"
+          ontouchstart="projHandleDown(event)"
+          onclick="event.stopPropagation()">⋮⋮</span>
         <button class="project-expand-btn" id="exp-${p.id}">▶</button>
         <div class="project-name">${esc(p.name)}</div>
         <div class="project-meta">
@@ -1720,6 +1771,76 @@ function renderProjects() {
       </div>
     </div>`;
   }).join('');
+
+  restoreOpenProjects(openIds);
+}
+
+// ─── Project Drag & Drop（以左側 ⋮⋮ 把手拖曳）───
+let projDragId = null;
+
+function projHandleDown(e) {
+  const card = e.currentTarget.closest('.project-card');
+  if (card) card.setAttribute('draggable', 'true');
+}
+
+function projHandleUp(e) {
+  const card = e.currentTarget.closest('.project-card');
+  if (card && !projDragId) card.removeAttribute('draggable');
+}
+
+function projDragStart(e) {
+  const card = e.currentTarget;
+  if (card.getAttribute('draggable') !== 'true') { e.preventDefault(); return; }
+  projDragId = card.dataset.id;
+  card.classList.add('dragging');
+  e.dataTransfer.effectAllowed = 'move';
+  try { e.dataTransfer.setData('text/plain', projDragId); } catch (err) {}
+}
+
+function projDragOver(e) {
+  if (!projDragId) return;
+  e.preventDefault();
+  e.currentTarget.classList.add('drag-over');
+}
+
+function projDragLeave(e) {
+  e.currentTarget.classList.remove('drag-over');
+}
+
+function projDragEnd() {
+  projDragId = null;
+  document.querySelectorAll('.project-card').forEach(el => {
+    el.classList.remove('dragging');
+    el.classList.remove('drag-over');
+    el.removeAttribute('draggable');
+  });
+}
+
+async function projDrop(e) {
+  if (!projDragId) return;
+  e.preventDefault();
+  const targetId = e.currentTarget.dataset.id;
+  const fromId = projDragId;
+  projDragEnd();
+  if (!fromId || fromId === targetId) return;
+
+  const from = projects.findIndex(p => p.id === fromId);
+  const to = projects.findIndex(p => p.id === targetId);
+  if (from < 0 || to < 0) return;
+  projects.splice(to, 0, projects.splice(from, 1)[0]);
+  projects.forEach((p, i) => { p.sort_order = i; });
+  renderProjects();
+
+  const results = await Promise.all(
+    projects.map((p, i) => sb.from('projects').update({ sort_order: i }).eq('id', p.id))
+  );
+  if (results.some(r => r.error)) {
+    showToast('排序未能儲存：請先在 Supabase 新增 sort_order 欄位');
+    await loadProjects();
+    renderProjects();
+  } else {
+    showToast('順序已更新');
+  }
 }
 
 function detailItem(label, value) {
@@ -1838,15 +1959,7 @@ async function saveSub() {
   closeSubModal();
   await loadProjects();
   renderProjects();
-  // Re-open the project accordion
-  setTimeout(() => {
-    const body = document.getElementById('pb-' + projId);
-    const btn = document.getElementById('exp-' + projId);
-    if (body && !body.classList.contains('open')) {
-      body.classList.add('open');
-      if (btn) btn.textContent = '▼';
-    }
-  }, 50);
+  restoreOpenProjects([projId]);
   showToast('子任務已儲存');
 }
 
@@ -1868,11 +1981,7 @@ async function deleteSub(projId, pathStr) {
   await sb.from('projects').update({ subs }).eq('id', projId);
   await loadProjects();
   renderProjects();
-  setTimeout(() => {
-    const body = document.getElementById('pb-' + projId);
-    const btn = document.getElementById('exp-' + projId);
-    if (body) { body.classList.add('open'); if (btn) btn.textContent = '▼'; }
-  }, 50);
+  restoreOpenProjects([projId]);
   showToast('已刪除');
 }
 
@@ -1906,11 +2015,7 @@ async function addNote(projId) {
   ta.value = '';
   await loadNotes();
   renderProjects();
-  setTimeout(() => {
-    const body = document.getElementById('pb-' + projId);
-    const btn = document.getElementById('exp-' + projId);
-    if (body) { body.classList.add('open'); if (btn) btn.textContent = '▼'; }
-  }, 50);
+  restoreOpenProjects([projId]);
   showToast('注意事項已新增');
 }
 
@@ -1922,11 +2027,7 @@ async function editNote(noteId, projId) {
   await sb.from('notes').update({ content: content.trim() }).eq('id', noteId);
   await loadNotes();
   renderProjects();
-  setTimeout(() => {
-    const body = document.getElementById('pb-' + projId);
-    const btn = document.getElementById('exp-' + projId);
-    if (body) { body.classList.add('open'); if (btn) btn.textContent = '▼'; }
-  }, 50);
+  restoreOpenProjects([projId]);
   showToast('已更新');
 }
 
@@ -1937,13 +2038,7 @@ async function deleteNote(noteId) {
   await sb.from('notes').delete().eq('id', noteId);
   await loadNotes();
   renderProjects();
-  if (projId) {
-    setTimeout(() => {
-      const body = document.getElementById('pb-' + projId);
-      const btn = document.getElementById('exp-' + projId);
-      if (body) { body.classList.add('open'); if (btn) btn.textContent = '▼'; }
-    }, 50);
-  }
+  if (projId) restoreOpenProjects([projId]);
   showToast('已刪除');
 }
 
@@ -2003,8 +2098,38 @@ document.addEventListener('click', e => {
 });
 
 // ═══════════════════════════════════════════════
-//  ADMIN — 工作區管理面板
+//  ADMIN — 管理者二次驗證 + 工作區管理面板
 // ═══════════════════════════════════════════════
+function openAdminGate() {
+  if (!isAdmin) { showToast('僅管理者可使用此功能'); return; }
+  document.getElementById('admin-gate-pw').value = '';
+  document.getElementById('admin-gate-error').style.display = 'none';
+  document.getElementById('admin-gate-modal').classList.add('open');
+  setTimeout(() => document.getElementById('admin-gate-pw').focus(), 80);
+}
+
+function closeAdminGate() {
+  document.getElementById('admin-gate-modal').classList.remove('open');
+  document.getElementById('admin-gate-pw').value = '';
+}
+
+async function verifyAdminGate() {
+  const pw = document.getElementById('admin-gate-pw').value;
+  const errEl = document.getElementById('admin-gate-error');
+  errEl.style.display = 'none';
+  if (!pw) { errEl.textContent = '請輸入密碼'; errEl.style.display = 'block'; return; }
+
+  // 以 workspaces 資料表中 admin 的密碼為準，前端原始碼不再存放任何管理者密碼
+  const { data, error } = await sb.from('workspaces').select('password').eq('name', 'admin').single();
+  if (error || !data || data.password !== pw) {
+    errEl.textContent = '密碼錯誤';
+    errEl.style.display = 'block';
+    return;
+  }
+  closeAdminGate();
+  openAdminModal();
+}
+
 async function openAdminModal() {
   document.getElementById('admin-modal').classList.add('open');
   await renderAdminWsList();
@@ -2017,7 +2142,7 @@ function closeAdminModal() {
 async function renderAdminWsList() {
   const listEl = document.getElementById('admin-ws-list');
   listEl.innerHTML = '<div style="color:var(--text-muted);font-size:13px;padding:8px 0">載入中…</div>';
-  const { data } = await sb.from('workspaces').select('*').order('created_at');
+  const { data } = await sb.from('workspaces').select('name,description,created_at').order('created_at');
   const ws = (data || []).filter(w => w.name !== 'admin');
   allWorkspaces = ws;
   renderWsDropdown();
@@ -2030,7 +2155,6 @@ async function renderAdminWsList() {
       <div style="flex:1">
         <div style="font-size:13px;font-weight:600;color:var(--text)">${esc(w.name)}</div>
         ${w.description ? `<div style="font-size:12px;color:var(--text-muted);margin-top:2px">${esc(w.description)}</div>` : ''}
-        <div style="font-size:11px;color:#bbb;margin-top:3px;font-family:var(--font-mono)">密碼：${esc(w.password)}</div>
       </div>
       <button class="btn btn-sm" onclick="switchToWorkspace('${esc(w.name)}');closeAdminModal()" style="white-space:nowrap">進入</button>
       <button class="btn btn-sm" style="color:#c0392b" onclick="deleteWorkspace('${esc(w.name)}')">刪除</button>
@@ -2063,7 +2187,7 @@ async function createWorkspace() {
 async function deleteWorkspace(name) {
   if (!confirm(`確定刪除工作區「${name}」？\n此操作不會刪除工作區內的資料。`)) return;
   await sb.from('workspaces').delete().eq('name', name);
-  if (WS === name) await switchToWorkspace(allWorkspaces[0]?.name || 'admin');
+  if (WS === name) await switchToWorkspace(allWorkspaces.find(w => w.name !== name)?.name || 'admin');
   await renderAdminWsList();
   showToast('工作區已刪除');
 }
@@ -2099,9 +2223,13 @@ document.querySelectorAll('.modal-overlay').forEach(o => {
   });
 });
 
-// Enter key on login
+// Enter key on login / admin gate
 document.addEventListener('keydown', e => {
-  if (e.key === 'Enter' && document.getElementById('login-screen').style.display !== 'none') {
+  if (e.key !== 'Enter') return;
+  if (document.getElementById('admin-gate-modal').classList.contains('open')) {
+    verifyAdminGate();
+  } else if (document.getElementById('login-screen').style.display !== 'none' &&
+             document.getElementById('app').style.display !== 'block') {
     doLogin();
   }
 });
