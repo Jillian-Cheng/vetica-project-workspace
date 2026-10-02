@@ -1031,6 +1031,7 @@
   .fin-est { background: #ede9fe; color: #6d28d9; }
   .fin-actual { background: #d1fae5; color: #047857; }
   .fin-proj { font-weight: 500; }
+  .project-card.flash { box-shadow: 0 0 0 2px #2980b9; transition: box-shadow 0.4s; }
   @media (max-width: 700px) { .fin-date { width: 120px; } }
 </style>
 </head>
@@ -1957,7 +1958,7 @@ function showCalPop(id) {
     ${p.member ? `<div class="cal-pop-row"><span class="cal-pop-k">負責人</span>${esc(p.member)}</div>` : ''}
     <div class="cal-pop-row"><span class="cal-pop-k">整體進度</span>${prog === null ? '尚無子任務' : `<span class="ov-bar" style="display:inline-block;vertical-align:middle"><span class="ov-bar-fill" style="display:block;width:${prog}%"></span></span> ${prog}%`}</div>`;
   const go = document.getElementById('cal-pop-go');
-  go.onclick = () => { closeCalPop(); switchToWorkspace(p.workspace, 'projects'); };
+  go.onclick = () => { closeCalPop(); openProjectEditor(p.id); };
   document.getElementById('cal-pop').classList.add('open');
 }
 
@@ -2573,6 +2574,21 @@ function renderWsDropdown() {
   `).join('');
 }
 
+// 一鍵前往：切到專案所屬工作區的專案規劃頁，展開並捲動到該專案
+function openProjectEditor(id) {
+  if (!isAdmin) return;
+  const p = allProjects.find(x => x.id === id);
+  if (!p) return;
+  switchToWorkspace(p.workspace, 'projects');
+  restoreOpenProjects([id]);
+  const card = document.getElementById('pc-' + id);
+  if (card) {
+    card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    card.classList.add('flash');
+    setTimeout(() => card.classList.remove('flash'), 1800);
+  }
+}
+
 // 切換檢視的工作區（資料已全部載入，直接切出子集）；tab 預設回到待辦
 function switchToWorkspace(name, tab) {
   if (!isAdmin) return;
@@ -2695,6 +2711,7 @@ function renderOverview() {
           </div>
         </div>
         ${open ? `<div class="ov-proj-detail">
+          <div style="margin:2px 0 6px"><button class="btn btn-sm btn-dark" onclick="openProjectEditor('${p.id}')">編輯子任務與注意事項 ›</button></div>
           ${fin ? `<div class="ov-fin">${esc(fin)}</div>` : ''}
           <div class="ov-sec-title">子任務進度</div>
           ${(p.subs && p.subs.length) ? ovSubs(p.subs, 0) : '<div class="text-muted">尚無子任務</div>'}
